@@ -33,8 +33,9 @@ Windows/macOS 默认构建升级至 **Qt 6.12.0**；配套 **Qt WebEngine 6.140.
 播放验收清单见 [CONTRIBUTING.md](CONTRIBUTING.md#playback-acceptance-checklist)。
 
 `2.0.4-Lain-rc1` 按预发布版交付。Windows 安装版和便携版均携带运行库，非 AVX2 回退不再改写安装目录；
-CI 检查打包后的实际播放、静默安装/卸载及回退 DLL。macOS CI 产物要求 **macOS 15+**，
-仅做 ad-hoc 签名，不包含 Apple 公证。发行构建关闭指向上游的更新检查，请从本仓库 Releases 获取更新。
+CI 检查打包后的实际播放、静默安装/卸载及回退 DLL。**本次仅编译和发布 Windows x64 客户端**，
+macOS/Linux 构建保留为手动任务，不随提交自动运行。
+发行构建关闭指向上游的更新检查，请从本仓库 Releases 获取更新。
 
 ## Building
 See [dev/](dev/) for platform-specific build instructions.

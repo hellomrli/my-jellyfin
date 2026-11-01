@@ -31,7 +31,7 @@ QT_VERSION="$(cat dev/qt-version.txt)"
 python3 -m venv "$QT_DEPS/python"
 "$QT_DEPS/python/bin/python" -m pip install -r dev/requirements-build.txt
 "$QT_DEPS/python/bin/python" dev/install-qt.py linux desktop "$QT_VERSION" linux_gcc_64 \
-  -m qtwebengine qtwebchannel qtpositioning -O "$QT_DEPS/qt"
+  -m qtwebengine qtwebchannel qtpositioning qtserialport -O "$QT_DEPS/qt"
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
   -DQTROOT="$QT_DEPS/qt/$QT_VERSION/gcc_64" \
   -DUSE_STATIC_MPVQT=ON -DREQUIRE_NODE_TESTS=ON

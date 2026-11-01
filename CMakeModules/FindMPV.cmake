@@ -62,6 +62,13 @@ if(NOT WIN32)
   mark_as_advanced(MPV_LIBRARY)
 endif(NOT WIN32)
 
+if(WIN32)
+  # Explicit -D paths may contain backslashes that would become escapes in the
+  # generated deployment script (for example, D:\a\... on Actions runners).
+  file(TO_CMAKE_PATH "${MPV_LIBRARY}" MPV_LIBRARY)
+  file(TO_CMAKE_PATH "${MPV_INCLUDE_DIR}" MPV_INCLUDE_DIR)
+endif()
+
 set(MPV_LIBRARY_DIRS _MPV_LIBRARY_DIR)
 list(REMOVE_DUPLICATES MPV_LIBRARY_DIRS)
 

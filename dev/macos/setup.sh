@@ -28,7 +28,7 @@ mkdir -p "${DEPS_DIR}"
 
 echo "[4/5] Installing Qt ${QT_VERSION}..."
 "${DEPS_DIR}/python/bin/python" "${SCRIPT_DIR}/../install-qt.py" mac desktop "${QT_VERSION}" clang_64 \
-    -m qtwebengine qtwebchannel qtpositioning -O "${DEPS_DIR}/qt"
+    -m qtwebengine qtwebchannel qtpositioning qtserialport -O "${DEPS_DIR}/qt"
 
 echo "[5/5] Generating CMakePresets.json..."
 BREW_PREFIX="$(brew --prefix)"

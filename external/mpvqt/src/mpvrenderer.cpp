@@ -16,7 +16,7 @@
 #include "mpvabstractitem_p.h"
 #include "mpvcontroller.h"
 
-Q_STATIC_LOGGING_CATEGORY(MpvQt_MpvRenderer, "MpvQt.MpvRenderer")
+Q_LOGGING_CATEGORY(MpvQt_MpvRenderer, "MpvQt.MpvRenderer")
 
 static void *get_proc_address_mpv(void *ctx, const char *name)
 {

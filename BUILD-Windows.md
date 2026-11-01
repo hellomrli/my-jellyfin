@@ -11,8 +11,9 @@
   避免普通 `aqt -m qtwebengine` 下载到旧的 7 月构建。底层仍由固定版本 aqt 完成下载、校验和解压。
 - libmpv 跟随上游更新至 `20261018-git-01e2533f31`，保留 AVX2 主版本与非 AVX2 回退 DLL。
 - 已完成 Linux 上 Qt 6.12.0 全量编译、自动测试和本地播放冒烟测试；Windows 的完整 Qt 下载清单及两份 MPV 压缩包已核对。
-  **新版 Windows/MSVC 构建、安装包和显卡/音频真机测试尚未完成**，不能把 Linux 验证当成 Windows 验证。
-  历史上的 Windows 6.11.3 构建记录保留为回退参考。
+  Windows/MSVC 构建、单元测试、独立安装包播放及安装/卸载由本仓库 Actions 在 Windows 上验证，
+  只有检查成功的产物才会发布；具体结果见对应版本的发布页和 Actions 日志。
+  **显卡、硬解和音频直通真机测试不在自动测试覆盖范围内**，不能把 Linux 验证当成 Windows 验证。
 
 ## 1. 环境
 
@@ -21,7 +22,7 @@
 | MSVC | VS 2022 Build Tools，v143 工具集与 Windows SDK | 不再推荐 VS 2019 搭配新版 Qt |
 | CMake / Ninja | CMake 3.25+、较新 Ninja | 需在 PATH 里 |
 | Python | 3.13 | 脚本创建独立虚拟环境，安装 `aqtinstall==3.3.0` |
-| Qt | `6.12.0` `msvc2022_64`，需 `qtwebengine qtwebchannel qtpositioning` | 用仓库安装适配脚本，不要混入旧 WebEngine |
+| Qt | `6.12.0` `msvc2022_64`，需 `qtwebengine qtwebchannel qtpositioning qtserialport` | 用仓库安装适配脚本，不要混入旧 WebEngine |
 | libmpv 开发包 | mpv-dev `x86_64-v3` 和 `x86_64` | 版本见 [`dev/mpv-version.txt`](dev/mpv-version.txt) |
 | Inno Setup | 6.x | 只有打安装包才需要，`ISCC.exe` 要在 PATH |
 | 7-Zip | 较新版本 | 解压依赖；MSVC 的 `dumpbin`/`lib` 用于生成 import lib |
@@ -66,7 +67,7 @@ dev\windows\test.bat
 ```bat
 py -3.13 -m venv dev\windows\deps\python
 dev\windows\deps\python\Scripts\python -m pip install -r dev\requirements-build.txt
-dev\windows\deps\python\Scripts\python dev\install-qt.py windows desktop 6.12.0 win64_msvc2022_64 -m qtwebengine qtwebchannel qtpositioning -O C:\Qt
+dev\windows\deps\python\Scripts\python dev\install-qt.py windows desktop 6.12.0 win64_msvc2022_64 -m qtwebengine qtwebchannel qtpositioning qtserialport -O C:\Qt
 ```
 
 解压匹配版本的 mpv-dev 包，得到 `include/` 和 `libmpv-2.dll`。

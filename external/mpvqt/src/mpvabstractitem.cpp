@@ -66,123 +66,102 @@ MpvController *MpvAbstractItem::mpvController()
     return d_ptr->m_mpvController;
 }
 
-// clang-format off
-
 void MpvAbstractItem::observeProperty(const QString &property, mpv_format format, uint64_t id)
 {
-    QMetaObject::invokeMethod(d_ptr->m_mpvController,
-                              &MpvController::observeProperty,
-                              Qt::QueuedConnection,
-                              property,
-                              format,
-                              id);
+    auto *controller = d_ptr->m_mpvController;
+    // Copy queued arguments; the functor overload also supports older distro Qt.
+    QMetaObject::invokeMethod(controller, [controller, property, format, id] {
+        controller->observeProperty(property, format, id);
+    }, Qt::QueuedConnection);
 }
 
 int MpvAbstractItem::unobserveProperty(uint64_t id)
 {
     int result = 0;
-    QMetaObject::invokeMethod(d_ptr->m_mpvController,
-                              &MpvController::unobserveProperty,
-                              Qt::BlockingQueuedConnection,
-                              Q_RETURN_ARG(int, result),
-                              id);
+    auto *controller = d_ptr->m_mpvController;
+    QMetaObject::invokeMethod(controller, [controller, id, &result] {
+        result = controller->unobserveProperty(id);
+    }, Qt::BlockingQueuedConnection);
 
     return result;
 }
 
 void MpvAbstractItem::setProperty(const QString &property, const QVariant &value)
 {
-    QMetaObject::invokeMethod(d_ptr->m_mpvController,
-                              &MpvController::setProperty,
-                              Qt::QueuedConnection,
-                              property,
-                              value);
+    auto *controller = d_ptr->m_mpvController;
+    QMetaObject::invokeMethod(controller, [controller, property, value] {
+        controller->setProperty(property, value);
+    }, Qt::QueuedConnection);
 }
 
 int MpvAbstractItem::setPropertyBlocking(const QString &property, const QVariant &value)
 {
     int error = 0;
-    QMetaObject::invokeMethod(d_ptr->m_mpvController,
-                              &MpvController::setProperty,
-                              Qt::BlockingQueuedConnection,
-                              Q_RETURN_ARG(int, error),
-                              property,
-                              value);
+    auto *controller = d_ptr->m_mpvController;
+    QMetaObject::invokeMethod(controller, [controller, property, value, &error] {
+        error = controller->setProperty(property, value);
+    }, Qt::BlockingQueuedConnection);
 
     return error;
 }
 
 void MpvAbstractItem::setPropertyAsync(const QString &property, const QVariant &value, int id)
 {
-    QMetaObject::invokeMethod(d_ptr->m_mpvController,
-                              &MpvController::setPropertyAsync,
-                              Qt::QueuedConnection,
-                              property,
-                              value,
-                              id);
+    auto *controller = d_ptr->m_mpvController;
+    QMetaObject::invokeMethod(controller, [controller, property, value, id] {
+        controller->setPropertyAsync(property, value, id);
+    }, Qt::QueuedConnection);
 }
 
 QVariant MpvAbstractItem::getProperty(const QString &property)
 {
     QVariant value;
-    QMetaObject::invokeMethod(d_ptr->m_mpvController,
-                              &MpvController::getProperty,
-                              Qt::BlockingQueuedConnection,
-                              Q_RETURN_ARG(QVariant, value),
-                              property);
+    auto *controller = d_ptr->m_mpvController;
+    QMetaObject::invokeMethod(controller, [controller, property, &value] {
+        value = controller->getProperty(property);
+    }, Qt::BlockingQueuedConnection);
 
     return value;
 }
 
 void MpvAbstractItem::getPropertyAsync(const QString &property, int id)
 {
-    QMetaObject::invokeMethod(d_ptr->m_mpvController,
-                              &MpvController::getPropertyAsync,
-                              Qt::QueuedConnection,
-                              property,
-                              id);
+    auto *controller = d_ptr->m_mpvController;
+    QMetaObject::invokeMethod(controller, [controller, property, id] {
+        controller->getPropertyAsync(property, id);
+    }, Qt::QueuedConnection);
 }
 
 void MpvAbstractItem::command(const QStringList &params)
 {
-    QMetaObject::invokeMethod(d_ptr->m_mpvController,
-                              &MpvController::command,
-                              Qt::QueuedConnection,
-                              params);
+    auto *controller = d_ptr->m_mpvController;
+    QMetaObject::invokeMethod(controller, [controller, params] {
+        controller->command(params);
+    }, Qt::QueuedConnection);
 }
 
 QVariant MpvAbstractItem::commandBlocking(const QStringList &params)
 {
     QVariant value;
-    QMetaObject::invokeMethod(d_ptr->m_mpvController,
-                              &MpvController::command,
-                              Qt::BlockingQueuedConnection,
-                              Q_RETURN_ARG(QVariant, value),
-                              params);
+    auto *controller = d_ptr->m_mpvController;
+    QMetaObject::invokeMethod(controller, [controller, params, &value] {
+        value = controller->command(params);
+    }, Qt::BlockingQueuedConnection);
     return value;
 }
 
 void MpvAbstractItem::commandAsync(const QStringList &params, int id)
 {
-    QMetaObject::invokeMethod(d_ptr->m_mpvController,
-                              &MpvController::commandAsync,
-                              Qt::QueuedConnection,
-                              params,
-                              id);
+    auto *controller = d_ptr->m_mpvController;
+    QMetaObject::invokeMethod(controller, [controller, params, id] {
+        controller->commandAsync(params, id);
+    }, Qt::QueuedConnection);
 }
 
 QVariant MpvAbstractItem::expandText(const QString &text)
 {
-    QVariant value;
-    QMetaObject::invokeMethod(d_ptr->m_mpvController,
-                              &MpvController::command,
-                              Qt::BlockingQueuedConnection,
-                              Q_RETURN_ARG(QVariant, value),
-                              QStringList() << QStringLiteral("expand-text") << text);
-    return value;
+    return commandBlocking({QStringLiteral("expand-text"), text});
 }
-
-// clang-format on
 
 void MpvAbstractItem::requestUpdateFromRenderer()
 {

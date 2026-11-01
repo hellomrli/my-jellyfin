@@ -1,11 +1,7 @@
 name: test
 
 on:
-  pull_request:
-  push:
-    branches:
-      - main
-      - master
+  workflow_dispatch:
 
 jobs:
   test:
@@ -44,7 +40,7 @@ jobs:
       run: |
         QT_VERSION="$(cat dev/qt-version.txt)"
         python dev/install-qt.py linux desktop "$QT_VERSION" linux_gcc_64 \
-          -m qtwebengine qtwebchannel qtpositioning -O "$RUNNER_TEMP/Qt"
+          -m qtwebengine qtwebchannel qtpositioning qtserialport -O "$RUNNER_TEMP/Qt"
         echo "QT_ROOT_DIR=$RUNNER_TEMP/Qt/$QT_VERSION/gcc_64" >> "$GITHUB_ENV"
         echo "QT_PLUGIN_PATH=$RUNNER_TEMP/Qt/$QT_VERSION/gcc_64/plugins" >> "$GITHUB_ENV"
 

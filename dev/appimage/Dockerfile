@@ -79,6 +79,8 @@ RUN find /AppDir/usr/lib -name '*.a' -delete && \
 # The bundled Mesa/DRI drivers won't match the host's kernel GPU driver,
 # which breaks EGL initialization and prevents mpv from rendering video.
 # With these removed, --library-path falls through to host paths in AppRun.
+# Keep the vendor-neutral libOpenGL shim: some desktops only ship libGL, and
+# the shim uses the host's GLVND dispatch library rather than a bundled driver.
 RUN rm -rf /AppDir/usr/lib/dri \
            /AppDir/usr/lib/vdpau && \
     rm -f /AppDir/usr/lib/libEGL.so* \
@@ -89,7 +91,6 @@ RUN rm -rf /AppDir/usr/lib/dri \
           /AppDir/usr/lib/libGLESv1_CM.so* \
           /AppDir/usr/lib/libGLESv2.so* \
           /AppDir/usr/lib/libGLdispatch.so* \
-          /AppDir/usr/lib/libOpenGL.so* \
           /AppDir/usr/lib/libgbm.so* \
           /AppDir/usr/lib/libvulkan.so* \
           /AppDir/usr/lib/libdrm.so* \

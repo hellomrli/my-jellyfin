@@ -55,7 +55,7 @@ do not download Qt. Package dry-runs can separately verify live repository paths
 
 ```sh
 python dev/install-qt.py windows desktop 6.12.0 win64_msvc2022_64 \
-  -m qtwebengine qtwebchannel qtpositioning --dry-run
+  -m qtwebengine qtwebchannel qtpositioning qtserialport --dry-run
 ```
 
 The JS tests cover direct/transcoded audio mapping, embedded/external subtitles,
@@ -83,6 +83,8 @@ macOS CI verifies the DMG, audits bundled Mach-O dependencies and minimum OS wit
 `tests/verify_macos_bundle.py`, checks the ad-hoc signature and runs the smoke test
 on the extracted app without the development Qt kit. Verification logs are kept
 as Actions artifacts even when a check fails; failed packages are not uploaded.
+Only the Windows build/test/package workflow runs automatically for this fork.
+macOS, AppImage and the Linux Qt matrix remain optional manual workflows.
 
 ### MPV Input-Node Leak Check (Linux)
 

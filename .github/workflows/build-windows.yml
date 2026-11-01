@@ -3,6 +3,10 @@ name: build-windows
 permissions:
   contents: read
 
+concurrency:
+  group: build-windows-${{ github.ref }}-${{ inputs.qt_version }}
+  cancel-in-progress: true
+
 env:
   QT_VERSION: ${{ inputs.qt_version }}
 
@@ -68,7 +72,7 @@ jobs:
       run: |
         python -m pip install -r dev/requirements-build.txt
         python dev/install-qt.py windows desktop "$QT_VERSION" "${{ matrix.qt_arch }}" \
-          -m qtwebengine qtwebchannel qtpositioning -O "$RUNNER_TEMP/Qt"
+          -m qtwebengine qtwebchannel qtpositioning qtserialport -O "$RUNNER_TEMP/Qt"
         echo "QT_ROOT_DIR=$RUNNER_TEMP/Qt/$QT_VERSION/msvc2022_64" >> "$GITHUB_ENV"
         echo "$RUNNER_TEMP/Qt/$QT_VERSION/msvc2022_64/bin" >> "$GITHUB_PATH"
     - name: Test Qt installer adapter

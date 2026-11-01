@@ -64,7 +64,7 @@ set "QT_PYTHON=!DEPS_DIR!\python\Scripts\python.exe"
 "!QT_PYTHON!" -m pip install -r "!SCRIPT_DIR!..\requirements-build.txt"
 if errorlevel 1 exit /b 1
 REM Reinstalling also repairs partially installed or obsolete WebEngine packages.
-"!QT_PYTHON!" "!SCRIPT_DIR!..\install-qt.py" windows desktop !QT_VERSION! win64_msvc2022_64 -m qtwebengine qtwebchannel qtpositioning -O "!DEPS_DIR!\qt"
+"!QT_PYTHON!" "!SCRIPT_DIR!..\install-qt.py" windows desktop !QT_VERSION! win64_msvc2022_64 -m qtwebengine qtwebchannel qtpositioning qtserialport -O "!DEPS_DIR!\qt"
 if errorlevel 1 exit /b 1
 
 echo [9/14] Downloading libmpv AVX2...
