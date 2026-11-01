@@ -12,7 +12,7 @@ async function playback({ directUrl, transcodeUrl }) {
     const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
     const waitFor = async predicate => {
         for (let i = 0; i < 150; i++) {
-            if (predicate()) return;
+            if (await predicate()) return;
             await sleep(100);
         }
         throw Error('Playback state did not arrive');
@@ -22,8 +22,10 @@ async function playback({ directUrl, transcodeUrl }) {
     window.api.player.userCommand('set ao null');
     const settings = new Map([['volume', 0.29]]);
     const events = [];
+    let playingCount = 0;
+    const nativeValue = method => new Promise(resolve => window.api.player[method](resolve));
     const player = new window._mpvVideoPlayer({
-        events: { trigger(_player, name) { events.push(name); } },
+        events: { trigger(_player, name) { events.push(name); if (name === 'playing') playingCount++; } },
         loading: { show() {}, hide() {} }, appRouter: { showVideoOsd() {} },
         appSettings: { get(key) { return settings.get(key); }, set(key, value) { settings.set(key, value); } },
         dashboard: { default: { setBackdropTransparency() {} } },
@@ -39,7 +41,7 @@ async function playback({ directUrl, transcodeUrl }) {
         }
     };
     await player.play(opts);
-    await waitFor(() => player.currentTime() > 500);
+    await waitFor(() => playingCount > 0 && player.currentTime() > 500);
     window.api.player.userCommand('print-text "SMOKE_DIRECT_AID=${=aid}"');
     const direct = { duration: player.duration(), position: player.currentTime(), volume: player.getVolume() };
     player.pause();
@@ -47,14 +49,23 @@ async function playback({ directUrl, transcodeUrl }) {
     player.unpause();
     await waitFor(() => !player.paused());
     player.currentTime(5000);
-    await waitFor(() => player.currentTime() >= 5000);
+    // The UI updates optimistically when seeking; this getter reads native seconds.
+    await waitFor(async () => await nativeValue('getPosition') >= 5);
     player.setVolume(0);
     const nativeVolume = await new Promise(resolve => window.api.player.volume(resolve));
     player.setSubtitleOffset(1.5);
+    const previousPlayingCount = playingCount;
     await player.play({ ...opts, playMethod: 'Transcode', url: transcodeUrl, resetSubtitleOffset: false });
-    await waitFor(() => player.currentTime() > 500);
+    // load() acknowledges the request, not playback readiness. Late position
+    // events from the previous file must not end this test before on_preloaded.
+    await waitFor(async () => {
+        const duration = player.duration();
+        if (playingCount <= previousPlayingCount || !(duration >= 8500 && duration <= 10000)) return false;
+        const position = await nativeValue('getPosition');
+        return position >= 1 && position < 5;
+    });
     window.api.player.userCommand('print-text "SMOKE_TRANSCODE_AID=${=aid}"');
-    const transcode = { position: player.currentTime(), volume: player.getVolume(), offset: player.getSubtitleOffset() };
+    const transcode = { duration: player.duration(), position: player.currentTime(), volume: player.getVolume(), offset: player.getSubtitleOffset() };
     await player.stop(true);
     await sleep(500);
     return { direct, transcode, nativeVolume, savedVolume: settings.get('volume'), events };
@@ -80,7 +91,7 @@ async function main() {
         '-map', '0:v', '-map', '1:a', '-map', '2:a', '-t', '15',
         '-c:v', 'mpeg4', '-q:v', '5', '-threads', '2', '-c:a', 'aac',
         '-metadata:s:a:0', 'language=eng', '-metadata:s:a:1', 'language=zho', sample]);
-    ffmpeg(['-i', sample, '-map', '0:v', '-map', '0:a:1', '-c', 'copy', selected]);
+    ffmpeg(['-i', sample, '-map', '0:v', '-map', '0:a:1', '-t', '9', '-c', 'copy', selected]);
 
     const reservation = net.createServer();
     await new Promise((resolve, reject) => {
@@ -153,6 +164,7 @@ async function main() {
         assert.equal(result.direct.volume, 29);
         assert.equal(result.nativeVolume, 0);
         assert.equal(result.savedVolume, 0);
+        assert.ok(result.transcode.duration >= 8500 && result.transcode.duration <= 10000);
         assert.equal(result.transcode.volume, 0);
         assert.equal(result.transcode.offset, 1.5);
         for (const event of ['playing', 'pause', 'unpause', 'stopped']) assert.ok(result.events.includes(event), event);
@@ -177,10 +189,12 @@ async function main() {
         }
     }
     readLogs(config);
-    assert.match(log, /SMOKE_DIRECT_AID=2\b/);
-    assert.match(log, /SMOKE_TRANSCODE_AID=1\b/);
-    assert.doesNotMatch(log, /No such signal/);
-    if (env.JELLYFIN_MPV_FORCE_FALLBACK === '1') assert.match(log, /Using fallback libmpv/);
+    assert.ok(/SMOKE_DIRECT_AID=2\b/.test(log), 'Wrong direct-play audio ID; see application.log');
+    assert.ok(/SMOKE_TRANSCODE_AID=1\b/.test(log), 'Wrong transcoded audio ID; see application.log');
+    assert.ok(!/No such signal/.test(log), 'Broken Qt signal connection; see application.log');
+    if (env.JELLYFIN_MPV_FORCE_FALLBACK === '1') {
+        assert.ok(/Using fallback libmpv/.test(log), 'The baseline MPV DLL must actually be loaded');
+    }
     fs.writeFileSync(path.join(output, 'result.json'), JSON.stringify(result, null, 2));
     console.log(JSON.stringify(result, null, 2));
 }

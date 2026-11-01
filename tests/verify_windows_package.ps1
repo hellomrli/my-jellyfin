@@ -82,7 +82,11 @@ try {
         if ($uninstall.ExitCode -ne 0) { throw "Uninstaller exited with $($uninstall.ExitCode)" }
     }
 }
-if (Test-Path (Join-Path $installed "Jellyfin Desktop.exe")) {
+$installedExecutable = Join-Path $installed "Jellyfin Desktop.exe"
+for ($attempt = 0; $attempt -lt 25 -and (Test-Path $installedExecutable); $attempt++) {
+    Start-Sleep -Milliseconds 200
+}
+if (Test-Path $installedExecutable) {
     throw "Silent uninstall did not remove the application"
 }
 Get-FileHash $installer, $zip | Format-Table -AutoSize
