@@ -301,6 +301,19 @@ Window
       web.profile.userScripts.collection = [ nativeshell ];
     }
 
+    function reapplyTransparentBackground()
+    {
+      // A server navigation can replace the renderer and lose transparency.
+      // Chromium only accepts fully opaque or fully transparent backgrounds.
+      web.backgroundColor = "#000000";
+      web.backgroundColor = "transparent";
+    }
+
+    onRenderProcessPidChanged: function(pid)
+    {
+      Qt.callLater(reapplyTransparentBackground);
+    }
+
     onLoadingChanged: function(loadingInfo)
     {
       // we use a timer here to switch to the webview since
@@ -314,6 +327,7 @@ Window
       else if (loadingInfo.status == WebEngineView.LoadSucceededStatus)
       {
         console.log("WebEngineLoadRequest success: " + loadingInfo.url);
+        Qt.callLater(reapplyTransparentBackground);
       }
       else if (loadingInfo.status == WebEngineView.LoadFailedStatus)
       {

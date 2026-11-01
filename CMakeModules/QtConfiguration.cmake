@@ -38,7 +38,12 @@ if(IS_DIRECTORY "${QTROOT}/include")
   include_directories(${QTROOT}/include)
 endif()
 
-set(REQUIRED_QT_VERSION "6.0.0")
+if(USE_STATIC_MPVQT)
+  # The bundled renderer has a compatibility shim for older distro Qt builds.
+  set(REQUIRED_QT_VERSION "6.2.0")
+else()
+  set(REQUIRED_QT_VERSION "6.5.0")
+endif()
 
 set(QTCONFIGROOT ${QTROOT}/lib/cmake/Qt6)
 set(components Core Network WebChannel Qml Quick Xml WebEngineQuick WebEngineCore Widgets OpenGL)
@@ -58,7 +63,7 @@ foreach(COMP ${components})
 	set(${mod}_DIR ${QTCONFIGROOT}${COMP})
 
 	# look for the actual package
-  find_package(Qt6 REQUIRED COMPONENTS ${COMP})
+  find_package(Qt6 ${REQUIRED_QT_VERSION} REQUIRED COMPONENTS ${COMP})
 
 	include_directories(${${mod}_INCLUDE_DIRS})
 	if(OPENELEC)
@@ -82,6 +87,7 @@ if(QT6_CFLAGS)
 endif(QT6_CFLAGS)
 
 message(STATUS "Qt version: ${Qt6Core_VERSION}")
+message(STATUS "Qt WebEngine version: ${Qt6WebEngineCore_VERSION}")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${QT6_CFLAGS}")
 
 set(CMAKE_REQUIRED_INCLUDES ${Qt6WebEngineCore_INCLUDE_DIRS};${Qt6WebEngineCore_PRIVATE_INCLUDE_DIRS})

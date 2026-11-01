@@ -47,7 +47,8 @@ class mpvAudioPlayer {
         self._duration = undefined;
         self._currentTime = undefined;
         self._paused = false;
-        self._volume = self.getSavedVolume() * 100;
+        self._waiting = false;
+        self._volume = Math.round(self.getSavedVolume() * 100);
         self._playRate = 1;
         self._hasConnection = false;
         self._bufferedRanges = [];
@@ -55,6 +56,7 @@ class mpvAudioPlayer {
         self.play = (options) => {
             self._started = false;
             self._timeUpdated = false;
+            self._waiting = false;
             self._currentTime = null;
             self._duration = undefined;
             self._bufferedRanges = [];
@@ -68,6 +70,7 @@ class mpvAudioPlayer {
                 player.updateDuration.connect(onDuration);
                 player.error.connect(onError);
                 player.paused.connect(onPause);
+                player.buffering.connect(onWaiting);
                 player.bufferedRangesUpdated.connect(onBufferedRangesUpdated);
             }
 
@@ -80,7 +83,7 @@ class mpvAudioPlayer {
                 self._currentSrc = val;
                 console.debug('playing url: ' + val);
 
-                // Convert to seconds
+                // Convert ticks to milliseconds.
                 const ms = (options.playerStartPositionTicks || 0) / 10000;
                 self._currentPlayOptions = options;
 
@@ -103,6 +106,7 @@ class mpvAudioPlayer {
             self._currentTime = null;
             self._currentSrc = null;
             self._currentPlayOptions = null;
+            self._waiting = false;
         };
 
         self.stop = (destroyPlayer) => {
@@ -135,6 +139,8 @@ class mpvAudioPlayer {
 
             const player = window.api.player;
             self._hasConnection = false;
+            self._waiting = false;
+            self._currentPlayOptions = null;
             player.playing.disconnect(onPlaying);
             player.positionUpdate.disconnect(onTimeUpdate);
             player.finished.disconnect(onEnded);
@@ -142,6 +148,7 @@ class mpvAudioPlayer {
             player.updateDuration.disconnect(onDuration);
             player.error.disconnect(onError);
             player.paused.disconnect(onPause);
+            player.buffering.disconnect(onWaiting);
             player.bufferedRangesUpdated.disconnect(onBufferedRangesUpdated);
             self._bufferedRanges = [];
         };
@@ -163,6 +170,10 @@ class mpvAudioPlayer {
         }
 
         function onPlaying() {
+            if (!self._currentPlayOptions) {
+                return;
+            }
+
             if (!self._started) {
                 self._started = true;
 
@@ -171,6 +182,8 @@ class mpvAudioPlayer {
             }
 
             self.setPlaybackRate(self.getPlaybackRate());
+
+            self._waiting = false;
 
             if (self._paused) {
                 self._paused = false;
@@ -181,8 +194,16 @@ class mpvAudioPlayer {
         }
 
         function onPause() {
+            self._waiting = false;
             self._paused = true;
             self.events.trigger(self, 'pause');
+        }
+
+        function onWaiting() {
+            if (self._currentPlayOptions && !self._waiting) {
+                self._waiting = true;
+                self.events.trigger(self, 'waiting');
+            }
         }
 
         function onBufferedRangesUpdated(ranges) {
@@ -202,7 +223,9 @@ class mpvAudioPlayer {
     }
 
     getSavedVolume() {
-        return this.appSettings.get('volume') || 1;
+        const saved = this.appSettings.get('volume');
+        const volume = saved == null || saved === '' ? 1 : Number(saved);
+        return Number.isFinite(volume) ? Math.max(0, Math.min(volume, 1)) : 1;
     }
 
     currentSrc() {
@@ -309,15 +332,24 @@ class mpvAudioPlayer {
     }
 
     saveVolume(value) {
-        if (value) {
+        if (Number.isFinite(value)) {
             this.appSettings.set('volume', value);
         }
     }
 
     setVolume(val, save = true) {
+        if (val == null || val === '') {
+            return;
+        }
+        val = Number(val);
+        if (!Number.isFinite(val)) {
+            return;
+        }
+        // Jellyfin's playback reports require an integer VolumeLevel.
+        val = Math.round(Math.max(0, Math.min(val, 100)));
         this._volume = val;
         if (save) {
-            this.saveVolume((val || 100) / 100);
+            this.saveVolume(val / 100);
             this.events.trigger(this, 'volumechange');
         }
         window.api.player.setVolume(val);

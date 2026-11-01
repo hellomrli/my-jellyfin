@@ -399,16 +399,20 @@ int MpvController::unobserveProperty(uint64_t id)
 
 int MpvController::setProperty(const QString &property, const QVariant &value)
 {
-    mpv_node node;
+    mpv_node node{};
     d_ptr->setNode(&node, value);
-    return mpv_set_property(d_ptr->m_mpv, property.toUtf8().constData(), MPV_FORMAT_NODE, &node);
+    int err = mpv_set_property(d_ptr->m_mpv, property.toUtf8().constData(), MPV_FORMAT_NODE, &node);
+    d_ptr->freeNode(&node);
+    return err;
 }
 
 int MpvController::setPropertyAsync(const QString &property, const QVariant &value, int id)
 {
-    mpv_node node;
+    mpv_node node{};
     d_ptr->setNode(&node, value);
     int err = mpv_set_property_async(d_ptr->m_mpv, id, property.toUtf8().constData(), MPV_FORMAT_NODE, &node);
+    // libmpv copies async arguments before returning; these nodes belong to us.
+    d_ptr->freeNode(&node);
     return err;
 }
 
@@ -431,10 +435,11 @@ int MpvController::getPropertyAsync(const QString &property, int id)
 
 QVariant MpvController::command(const QStringList &params)
 {
-    mpv_node node;
+    mpv_node node{};
     d_ptr->setNode(&node, params);
     mpv_node result;
     int err = mpv_command_node(d_ptr->m_mpv, &node, &result);
+    d_ptr->freeNode(&node);
     if (err < 0) {
         qCDebug(MpvQt_MpvController) << getError(err) << params;
         return QVariant::fromValue(ErrorReturn(err));
@@ -445,9 +450,11 @@ QVariant MpvController::command(const QStringList &params)
 
 int MpvController::commandAsync(const QVariant &params, int id)
 {
-    mpv_node node;
+    mpv_node node{};
     d_ptr->setNode(&node, params);
-    return mpv_command_node_async(d_ptr->m_mpv, id, &node);
+    int err = mpv_command_node_async(d_ptr->m_mpv, id, &node);
+    d_ptr->freeNode(&node);
+    return err;
 }
 
 std::shared_ptr<MpvHandleManager> MpvController::mpvHandleManager() const

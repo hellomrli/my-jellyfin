@@ -2,11 +2,10 @@
 REM Jellyfin Desktop - Common variables
 REM Sourced by other scripts
 
-set QT_VERSION=6.10.1
-set MPV_RELEASE=20260223
-set MPV_VERSION=20260223-git-f439c7f
 set SCRIPT_DIR=%~dp0
 for %%i in ("%SCRIPT_DIR%\..\..") do set "PROJECT_ROOT=%%~fi"
+if not defined QT_VERSION set /p QT_VERSION=<"%SCRIPT_DIR%..\qt-version.txt"
+if not defined MPV_VERSION set /p MPV_VERSION=<"%SCRIPT_DIR%..\mpv-version.txt"
 set DEPS_DIR=%SCRIPT_DIR%deps
 set BUILD_DIR=%PROJECT_ROOT%\build
 set EXE_NAME=Jellyfin Desktop.exe

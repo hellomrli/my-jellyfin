@@ -18,8 +18,8 @@ if not exist "%DEPS_DIR%\vcruntime" (
 REM === Find Qt ===
 set QTROOT_WIN=%DEPS_DIR%\qt\%QT_VERSION%\msvc2022_64
 set "QTROOT=%QTROOT_WIN:\=/%"
-if not exist "%QTROOT_WIN%" (
-    echo ERROR: Qt not found at %QTROOT_WIN%
+if not exist "%QTROOT_WIN%\lib\cmake\Qt6WebEngineQuick\Qt6WebEngineQuickConfig.cmake" (
+    echo ERROR: Complete Qt + WebEngine kit not found at %QTROOT_WIN%
     echo Run setup.bat first
     exit /b 1
 )
@@ -48,9 +48,11 @@ if not exist "%DEPS_DIR%\mpv\libmpv-2.dll.lib" (
     echo Generating import library...
     echo LIBRARY libmpv-2.dll > "%DEPS_DIR%\mpv\mpv.def"
     echo EXPORTS >> "%DEPS_DIR%\mpv\mpv.def"
-    for /f "skip=19 tokens=4" %%a in ('dumpbin /exports "%DEPS_DIR%\mpv\libmpv-2.dll"') do (
-        if not "%%a"=="" echo %%a >> "%DEPS_DIR%\mpv\mpv.def"
+    for /f "tokens=4" %%a in ('dumpbin /exports "%DEPS_DIR%\mpv\libmpv-2.dll" ^| findstr /c:" mpv_"') do (
+        >>"%DEPS_DIR%\mpv\mpv.def" echo %%a
     )
+    findstr /x /c:"mpv_create" "%DEPS_DIR%\mpv\mpv.def" >nul
+    if errorlevel 1 exit /b 1
     lib /def:"%DEPS_DIR%\mpv\mpv.def" /out:"%DEPS_DIR%\mpv\libmpv-2.dll.lib" /MACHINE:X64
     if errorlevel 1 (
         echo ERROR: Failed to create import library
@@ -64,10 +66,10 @@ echo Configuring...
 cmake -GNinja ^
     -DCMAKE_BUILD_TYPE=RelWithDebInfo ^
     -DCMAKE_INSTALL_PREFIX=output ^
-    -DQTROOT=%QTROOT% ^
+    -DQTROOT="%QTROOT%" ^
     -DMPV_INCLUDE_DIR="%DEPS_CMAKE%/mpv/include" ^
     -DMPV_LIBRARY="%DEPS_CMAKE%/mpv/libmpv-2.dll.lib" ^
-    -DCHECK_FOR_UPDATES=ON ^
+    -DCHECK_FOR_UPDATES=OFF ^
     -DUSE_STATIC_MPVQT=ON ^
     "%PROJECT_ROOT%"
 if errorlevel 1 (

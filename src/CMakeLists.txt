@@ -76,9 +76,10 @@ set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/qrc_resources.cpp PROPER
 list(APPEND RESOURCE_FILES ${CMAKE_CURRENT_BINARY_DIR}/qrc_resources.cpp)
 
 set(MACOSX_BUNDLE_ICON_FILE jellyfin.icns)
-set(MACOSX_BUNDLE_SHORT_VERSION_STRING ${VERSION_STRING})
+set(MACOSX_BUNDLE_SHORT_VERSION_STRING ${VERSION_BASE})
 set(MACOSX_BUNDLE_BUNDLE_NAME "Jellyfin")
-set(MACOSX_BUNDLE_BUNDLE_VERSION ${VERSION_STRING})
+set(MACOSX_BUNDLE_BUNDLE_VERSION ${VERSION_BASE})
+set(MACOSX_BUNDLE_INFO_STRING "Jellyfin Desktop ${VERSION_STRING}")
 set(MACOSX_BUNDLE_GUI_IDENTIFIER org.jellyfin.JellyfinDesktop)
 
 if(APPLE)
@@ -129,7 +130,7 @@ add_executable(${MAIN_TARGET} WIN32 MACOSX_BUNDLE ${MAIN_SRCS} ${BUNDLED_FILES} 
 add_dependencies(${MAIN_TARGET} generate_resources)
 std_target_properties(${MAIN_TARGET})
 if(APPLE)
-  set(_install_rpath "@executable_path/../Frameworks;${QTROOT}/lib")
+  set(_install_rpath "@executable_path/../Frameworks")
 else()
   set(_install_rpath "${QTROOT}/lib")
 endif()
@@ -226,7 +227,7 @@ endif()
 # Delay-load libmpv on Windows for runtime AVX2 fallback
 if(WIN32)
   target_link_libraries(jmp_core delayimp.lib)
-  target_link_options(jmp_core PRIVATE /DELAYLOAD:libmpv-2.dll)
+  target_link_options(jmp_core PUBLIC /DELAYLOAD:libmpv-2.dll)
 endif()
 
 target_link_libraries(${MAIN_TARGET} PRIVATE jmp_core)

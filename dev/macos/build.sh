@@ -9,8 +9,8 @@ SCRIPT_DIR="$(cd "$(dirname "${0}")" && pwd)"
 QTROOT="${DEPS_DIR}/qt/${QT_VERSION}/macos"
 
 # Check dependencies
-if [ ! -d "${QTROOT}" ]; then
-    echo "error: Qt not found at ${QTROOT}" >&2
+if [ ! -f "${QTROOT}/lib/cmake/Qt6WebEngineQuick/Qt6WebEngineQuickConfig.cmake" ]; then
+    echo "error: Complete Qt + WebEngine kit not found at ${QTROOT}" >&2
     echo "Run setup.sh first" >&2
     exit 1
 fi

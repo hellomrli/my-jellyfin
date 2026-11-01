@@ -1,10 +1,26 @@
 name: build-macos
 
+permissions:
+  contents: read
+
+env:
+  QT_VERSION: ${{ inputs.qt_version }}
+
 on:
   workflow_call:
+    inputs:
+      qt_version:
+        type: string
+        default: ""
   workflow_dispatch:
+    inputs:
+      qt_version:
+        description: "Qt version override (empty uses dev/qt-version.txt)"
+        type: string
+        default: ""
   push:
     branches:
+      - main
       - master
 
 jobs:
@@ -18,37 +34,53 @@ jobs:
           - runner: macos-15-intel
             artifact: macos-x86_64
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
     steps:
     - uses: actions/checkout@v7
       with:
         submodules: recursive
-    - name: Install Qt
-      uses: jurplel/install-qt-action@v4
+    - uses: actions/setup-python@v6
       with:
-        # using older version due to severe memory leak
-        # https://qt-project.atlassian.net/browse/QTBUG-141377https://qt-project.atlassian.net/browse/QTBUG-141377
-        #version: '6.10.1'
-        version: '6.9.3'
-        arch: clang_64
-        modules: 'qtwebengine qtwebchannel qtpositioning'
+        python-version: '3.13'
+    - uses: actions/setup-node@v5
+      with:
+        node-version: '24'
+    - name: Load Qt version
+      run: |
+        QT_VERSION="${QT_VERSION:-$(cat dev/qt-version.txt)}"
+        [[ "$QT_VERSION" =~ ^6\.[0-9]+\.[0-9]+$ ]] || exit 1
+        echo "QT_VERSION=$QT_VERSION" >> "$GITHUB_ENV"
+    - name: Install Qt and WebEngine
+      run: |
+        python -m pip install -r dev/requirements-build.txt
+        python dev/install-qt.py mac desktop "$QT_VERSION" clang_64 \
+          -m qtwebengine qtwebchannel qtpositioning -O "$RUNNER_TEMP/Qt"
+        echo "QT_ROOT_DIR=$RUNNER_TEMP/Qt/$QT_VERSION/macos" >> "$GITHUB_ENV"
+        echo "$RUNNER_TEMP/Qt/$QT_VERSION/macos/bin" >> "$GITHUB_PATH"
     - name: Install dependencies
       run: |
+        xcodebuild -version
+        xcrun --sdk macosx --show-sdk-version
         brew update
-        brew install mpv
+        brew install mpv ffmpeg create-dmg
     - name: Release build
       run: |
         cmake -B build -G Ninja \
-          -DQTROOT=$QT_ROOT_DIR \
-          -DCMAKE_PREFIX_PATH=$QT_ROOT_DIR \
+          -DQTROOT="$QT_ROOT_DIR" \
+          -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" \
           -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
           -DCMAKE_INSTALL_PREFIX=build/output \
-          -DCHECK_FOR_UPDATES=ON \
-          -DUSE_STATIC_MPVQT=ON
+          -DCHECK_FOR_UPDATES=OFF \
+          -DUSE_STATIC_MPVQT=ON \
+          -DREQUIRE_NODE_TESTS=ON
         cmake --build build --target install
-    - name: Sign and create dmg
+    - name: Run regression tests
+      run: ctest --test-dir build --output-on-failure
+    - name: Ad-hoc sign and create dmg
       run: |
         codesign --force --deep -s - "./build/output/Jellyfin Desktop.app/"
-        brew install create-dmg
+        codesign --verify --deep --strict "./build/output/Jellyfin Desktop.app/"
         VERSION=$(cat VERSION)
         ARCH=$(uname -m)
         DMG_NAME="JellyfinDesktop-${VERSION}-${ARCH}.dmg"
@@ -60,8 +92,35 @@ jobs:
           --icon "Jellyfin Desktop.app" 125 150 \
           --app-drop-link 375 150 \
           "${DMG_NAME}" "./build/output/Jellyfin Desktop.app"
+    - name: Verify disk image and packaged playback
+      run: |
+        DMG_NAME="JellyfinDesktop-$(cat VERSION)-$(uname -m).dmg"
+        OUTPUT="$RUNNER_TEMP/package-checks"
+        mkdir -p "$OUTPUT/Applications" "$OUTPUT/mount"
+        hdiutil verify "$DMG_NAME"
+        hdiutil attach -readonly -nobrowse -mountpoint "$OUTPUT/mount" "$DMG_NAME"
+        trap 'hdiutil detach "$OUTPUT/mount" || true' EXIT
+        ditto "$OUTPUT/mount/Jellyfin Desktop.app" "$OUTPUT/Applications/Jellyfin Desktop.app"
+        hdiutil detach "$OUTPUT/mount"
+        trap - EXIT
+        APP="$OUTPUT/Applications/Jellyfin Desktop.app"
+        python tests/verify_macos_bundle.py "$APP"
+        codesign --verify --deep --strict "$APP"
+        mv "$QT_ROOT_DIR" "$QT_ROOT_DIR-package-test"
+        trap 'mv "$QT_ROOT_DIR-package-test" "$QT_ROOT_DIR"' EXIT
+        node tests/smoke_packaged_player.cjs "$APP/Contents/MacOS/Jellyfin Desktop" "$OUTPUT/playback"
+    - name: Archive verification logs
+      if: always()
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ matrix.artifact }}-test-logs
+        path: |
+          build/Testing/Temporary/LastTest.log
+          ${{ runner.temp }}/package-checks/playback/**/*.log
+          ${{ runner.temp }}/package-checks/playback/result.json
     - name: Archive production artifacts
       uses: actions/upload-artifact@v7
       with:
         name: ${{ matrix.artifact }}
         path: ${{ github.workspace }}/JellyfinDesktop-*.dmg
+        if-no-files-found: error

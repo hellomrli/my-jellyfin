@@ -4,15 +4,34 @@ on:
   pull_request:
   push:
     branches:
+      - main
       - master
 
 jobs:
   test:
+    strategy:
+      fail-fast: false
+      matrix:
+        qt: [system, latest]
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v7
       with:
         submodules: recursive
+
+    - uses: actions/setup-node@v5
+      with:
+        node-version: '24'
+
+    - uses: actions/setup-python@v6
+      with:
+        python-version: '3.13'
+
+    - name: Test playback adapters and Qt installer
+      run: |
+        node --test tests/test_mpvPlayers.js
+        python -m pip install -r dev/requirements-build.txt
+        python -m unittest discover -s tests -p 'test_install_qt.py'
 
     - name: Install build dependencies from debian/control
       run: |
@@ -20,8 +39,20 @@ jobs:
         sudo apt-get install --yes devscripts equivs ninja-build lcov
         sudo mk-build-deps -i -r -t "apt-get --yes" debian/control
 
+    - name: Install latest Qt and WebEngine
+      if: matrix.qt == 'latest'
+      run: |
+        QT_VERSION="$(cat dev/qt-version.txt)"
+        python dev/install-qt.py linux desktop "$QT_VERSION" linux_gcc_64 \
+          -m qtwebengine qtwebchannel qtpositioning -O "$RUNNER_TEMP/Qt"
+        echo "QT_ROOT_DIR=$RUNNER_TEMP/Qt/$QT_VERSION/gcc_64" >> "$GITHUB_ENV"
+        echo "QT_PLUGIN_PATH=$RUNNER_TEMP/Qt/$QT_VERSION/gcc_64/plugins" >> "$GITHUB_ENV"
+
     - name: Configure
-      run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DUSE_STATIC_MPVQT=ON -DCOVERAGE=ON
+      run: |
+        cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DUSE_STATIC_MPVQT=ON \
+          -DQTROOT="${QT_ROOT_DIR:-}" -DREQUIRE_NODE_TESTS=ON \
+          -DCOVERAGE=${{ matrix.qt == 'system' && 'ON' || 'OFF' }}
 
     - name: Build
       run: cmake --build build
@@ -32,6 +63,7 @@ jobs:
         ctest --output-on-failure
 
     - name: Collect coverage
+      if: matrix.qt == 'system'
       run: |
         lcov --capture --directory build --output-file coverage.info \
           --ignore-errors mismatch
@@ -42,11 +74,11 @@ jobs:
         lcov --summary coverage.info 2>&1 | grep -v 'no data found' > coverage_summary.txt
 
     - name: Save PR number
-      if: github.event_name == 'pull_request'
+      if: github.event_name == 'pull_request' && matrix.qt == 'system'
       run: echo "${{ github.event.pull_request.number }}" > pr_number.txt
 
     - name: Upload coverage artifact
-      if: github.event_name == 'pull_request'
+      if: github.event_name == 'pull_request' && matrix.qt == 'system'
       uses: actions/upload-artifact@v7
       with:
         name: coverage

@@ -1,11 +1,15 @@
-set(PROJECT_SOURCE_DIR @PROJECT_SOURCE_DIR@)
+set(PROJECT_SOURCE_DIR "@PROJECT_SOURCE_DIR@")
 set(QTROOT "@QTROOT@")
 
 message(STATUS "Running windeployqt from: ${QTROOT}/bin/windeployqt.exe")
 message(STATUS "Target: ${CMAKE_INSTALL_PREFIX}/Jellyfin Desktop.exe")
 
 execute_process(
-  COMMAND "${QTROOT}/bin/windeployqt.exe" --verbose 9 --qmldir @SOURCE_ROOT@/src/ui "${CMAKE_INSTALL_PREFIX}/Jellyfin Desktop.exe"
+  COMMAND "${QTROOT}/bin/windeployqt.exe" --verbose 2 --release --no-compiler-runtime
+    --qmldir "@SOURCE_ROOT@/src/ui"
+    --plugindir "${CMAKE_INSTALL_PREFIX}/plugins"
+    --qml-deploy-dir "${CMAKE_INSTALL_PREFIX}/qml"
+    "${CMAKE_INSTALL_PREFIX}/Jellyfin Desktop.exe"
   RESULT_VARIABLE WINDEPLOYQT_RESULT
 )
 
@@ -24,7 +28,7 @@ foreach(d @CMAKE_FIND_ROOT_PATH@)
   list(APPEND SEARCHDIRS ${d}/lib)
 endforeach()
 
-get_filename_component(CEC_DIR @CEC_LIBRARY@ DIRECTORY)
+get_filename_component(CEC_DIR "@CEC_LIBRARY@" DIRECTORY)
 list(APPEND SEARCHDIRS ${CEC_DIR})
 
 # fixup_bundle("${CMAKE_INSTALL_PREFIX}/Jellyfin Desktop.exe" "" "${SEARCHDIRS}")
@@ -48,26 +52,16 @@ else()
   message(STATUS "Not using separate ANGLE deps")
 endif()
 
-# Bundle MSVC runtime DLLs (pre-extracted by setup-windows.bat)
-set(VCRUNTIME_DIR "@PROJECT_SOURCE_DIR@/deps/vcruntime")
-set(VCREDIST_EXE "@PROJECT_SOURCE_DIR@/deps/vc_redist.x64.exe")
-
-if(EXISTS "${VCRUNTIME_DIR}" AND EXISTS "${VCREDIST_EXE}")
-  # Copy runtime DLLs to redist subfolder
-  file(MAKE_DIRECTORY "${CMAKE_INSTALL_PREFIX}/redist")
-  file(GLOB RUNTIME_DLLS "${VCRUNTIME_DIR}/*.dll")
-  foreach(dll_path ${RUNTIME_DLLS})
-    get_filename_component(dll_name "${dll_path}" NAME)
-    file(INSTALL "${dll_path}" DESTINATION "${CMAKE_INSTALL_PREFIX}/redist")
-    message(STATUS "Bundled runtime: ${dll_name}")
-  endforeach()
-
-  # Copy VCRedist installer for bundling
-  file(INSTALL "${VCREDIST_EXE}" DESTINATION "${CMAKE_INSTALL_PREFIX}")
-  message(STATUS "Bundled VCRedist installer: vc_redist.x64.exe")
-else()
-  message(WARNING "VCRuntime DLLs not found. Run setup-windows.bat first.")
-endif()
+# Always use the matching app-local runtime, even if an older system CRT exists.
+set(VCRUNTIME_DIR "@VCRUNTIME_DIR@")
+foreach(required_dll vcruntime140.dll vcruntime140_1.dll msvcp140.dll)
+  if(NOT EXISTS "${VCRUNTIME_DIR}/${required_dll}")
+    message(FATAL_ERROR "Missing ${required_dll}; set VCRUNTIME_DIR to the VS 2022 redistributable DLL directory.")
+  endif()
+endforeach()
+file(GLOB RUNTIME_DLLS "${VCRUNTIME_DIR}/*.dll")
+file(INSTALL ${RUNTIME_DLLS} DESTINATION "${CMAKE_INSTALL_PREFIX}")
+file(INSTALL "${PROJECT_SOURCE_DIR}/LICENSE" DESTINATION "${CMAKE_INSTALL_PREFIX}")
 
 if(@DO_SIGN@)
   file(GLOB_RECURSE EXES ${CMAKE_INSTALL_PREFIX}/*.exe ${CMAKE_INSTALL_PREFIX}/*.dll)

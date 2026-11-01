@@ -21,15 +21,14 @@ if ! command -v brew > /dev/null; then
 fi
 
 echo "[3/5] Installing build tools..."
-brew install aqtinstall mpv ninja cmake create-dmg
+brew install python@3.13 mpv ninja cmake create-dmg
+mkdir -p "${DEPS_DIR}"
+"$(brew --prefix python@3.13)/bin/python3.13" -m venv "${DEPS_DIR}/python"
+"${DEPS_DIR}/python/bin/python" -m pip install -r "${SCRIPT_DIR}/../requirements-build.txt"
 
 echo "[4/5] Installing Qt ${QT_VERSION}..."
-if [ ! -d "${DEPS_DIR}/qt/${QT_VERSION}/macos" ]; then
-    mkdir -p "${DEPS_DIR}/qt"
-    (cd "${DEPS_DIR}" && aqt install-qt mac desktop "${QT_VERSION}" -m qtwebengine qtwebchannel qtpositioning -O "qt")
-else
-    echo "Qt already installed, skipping"
-fi
+"${DEPS_DIR}/python/bin/python" "${SCRIPT_DIR}/../install-qt.py" mac desktop "${QT_VERSION}" clang_64 \
+    -m qtwebengine qtwebchannel qtpositioning -O "${DEPS_DIR}/qt"
 
 echo "[5/5] Generating CMakePresets.json..."
 BREW_PREFIX="$(brew --prefix)"

@@ -30,6 +30,7 @@
 #include "ui/ErrorMessage.h"
 #include "UniqueApplication.h"
 #include "utils/Log.h"
+#include "utils/ChromiumFlags.h"
 
 #ifdef Q_OS_MAC
 #include "PFMoveApplication.h"
@@ -41,46 +42,54 @@
 
 #if defined(Q_OS_WIN) && defined(_M_X64)
 #include <windows.h>
+#include <delayimp.h>
 #include <cstdio>
+#include <cstring>
+#include <string>
 
-/////////////////////////////////////////////////////////////////////////////////////////
-// Check AVX2 support and swap libmpv DLL if needed (before delay-load triggers)
-// Only relevant for x64 - ARM64 doesn't have AVX2
-static void setupMpvFallback()
+static HMODULE mpvFallbackModule = nullptr;
+
+static FARPROC WINAPI mpvDelayLoadHook(unsigned notification, PDelayLoadInfo info)
 {
-  // Check if AVX2 is available (PF_AVX2_INSTRUCTIONS_AVAILABLE = 40)
-  if (IsProcessorFeaturePresent(40))
+  if (notification == dliNotePreLoadLibrary && mpvFallbackModule
+      && std::strcmp(info->szDll, "libmpv-2.dll") == 0)
+    return reinterpret_cast<FARPROC>(mpvFallbackModule);
+  return nullptr;
+}
+
+extern "C" const PfnDliHook __pfnDliNotifyHook2 = mpvDelayLoadHook;
+
+// Select the fallback without modifying an installation that may be read-only.
+static bool setupMpvFallback()
+{
+  wchar_t forceFallback[2] = {};
+  const bool forced = GetEnvironmentVariableW(L"JELLYFIN_MPV_FORCE_FALLBACK", forceFallback, 2) == 1
+                      && forceFallback[0] == L'1';
+  if (!forced && IsProcessorFeaturePresent(40))
   {
     fprintf(stderr, "AVX2 supported, using primary libmpv\n");
-    return;
+    return true;
   }
 
-  fprintf(stderr, "AVX2 not supported, checking for fallback libmpv\n");
-
-  // Get application directory
-  wchar_t exePath[MAX_PATH];
-  GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+  wchar_t exePath[32768] = {};
+  const DWORD length = GetModuleFileNameW(nullptr, exePath, 32768);
+  if (!length || length >= 32768)
+    return false;
   std::wstring appDir(exePath);
-  size_t lastSlash = appDir.find_last_of(L"\\/");
-  if (lastSlash != std::wstring::npos)
-    appDir = appDir.substr(0, lastSlash + 1);
-
-  std::wstring fallbackPath = appDir + L"libmpv-fallback.dll";
-  std::wstring primaryPath = appDir + L"libmpv-2.dll";
-
-  // Check if fallback exists
-  if (GetFileAttributesW(fallbackPath.c_str()) == INVALID_FILE_ATTRIBUTES)
+  const size_t lastSlash = appDir.find_last_of(L"\\/");
+  if (lastSlash == std::wstring::npos)
+    return false;
+  const std::wstring fallbackPath = appDir.substr(0, lastSlash + 1) + L"libmpv-fallback.dll";
+  mpvFallbackModule = LoadLibraryExW(fallbackPath.c_str(), nullptr,
+                                    LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32);
+  if (!mpvFallbackModule)
   {
-    fprintf(stderr, "No fallback libmpv available\n");
-    return;
+    fprintf(stderr, "Cannot load required fallback libmpv (Windows error %lu). Reinstall the complete package.\n",
+            GetLastError());
+    return false;
   }
-
-  // Delete primary and rename fallback
-  DeleteFileW(primaryPath.c_str());
-  if (MoveFileW(fallbackPath.c_str(), primaryPath.c_str()))
-    fprintf(stderr, "Switched to fallback libmpv (non-AVX2)\n");
-  else
-    fprintf(stderr, "Failed to switch to fallback libmpv\n");
+  fprintf(stderr, "Using fallback libmpv (non-AVX2, installation unchanged)\n");
+  return true;
 }
 #endif
 
@@ -103,20 +112,6 @@ static void preinitQt()
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
-char** appendCommandLineArguments(int argc, char **argv, const QStringList& args)
-{
-  size_t newSize = static_cast<size_t>(argc + args.length() + 1) * sizeof(char*);
-  char** newArgv = static_cast<char**>(calloc(1, newSize));
-  memcpy(newArgv, argv, static_cast<size_t>(argc) * sizeof(char*));
-
-  int pos = argc;
-  for(const QString& str : args)
-    newArgv[pos++] = qstrdup(str.toUtf8().data());
-
-  return newArgv;
-}
-
-/////////////////////////////////////////////////////////////////////////////////////////
 void ShowLicenseInfo()
 {
   QFile licenses(":/misc/licenses.txt");
@@ -130,18 +125,12 @@ void ShowLicenseInfo()
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
-QStringList g_qtFlags = {
-  "--lang=zh-CN",
-  "--enable-gpu-rasterization",
-  "--disable-features=MediaSessionService"
-};
-
-/////////////////////////////////////////////////////////////////////////////////////////
 int main(int argc, char *argv[])
 {
 #if defined(Q_OS_WIN) && defined(_M_X64)
   // Must run before any mpv code triggers delay-load
-  setupMpvFallback();
+  if (!setupMpvFallback())
+    return EXIT_FAILURE;
 #endif
 
   try
@@ -201,9 +190,6 @@ int main(int argc, char *argv[])
     parser.addOption(deleteProfileOption);
     parser.addOption(createProfileOption);
 
-    char **newArgv = appendCommandLineArguments(argc, argv, g_qtFlags);
-    int newArgc = argc + static_cast<int>(g_qtFlags.size());
-
     preinitQt();
 
     QStringList arguments;
@@ -218,7 +204,7 @@ int main(int argc, char *argv[])
       // a small chicken-or-egg problem, which we "solve" by making
       // this temporary console app.
       //
-      QCoreApplication core(newArgc, newArgv);
+      QCoreApplication core(argc, argv);
 
       // Now parse the command line.
       parser.process(arguments);
@@ -399,6 +385,10 @@ int main(int argc, char *argv[])
       Log::SetLogLevel(logLevel);
 
     Log::Init();
+#if defined(Q_OS_WIN) && defined(_M_X64)
+    if (mpvFallbackModule)
+      qInfo() << "Using fallback libmpv (non-AVX2, installation unchanged)";
+#endif
 
     auto scale = parser.value("scale-factor");
     if (scale.isEmpty() || scale == "auto")
@@ -425,27 +415,17 @@ int main(int argc, char *argv[])
     }
 #endif
 
-    QStringList chromiumFlags;
-#ifdef Q_OS_LINUX
-    // Disable QtWebEngine's automatic MPRIS registration - we handle it ourselves
-    chromiumFlags << "--disable-features=MediaSessionService,HardwareMediaKeyHandling";
-#endif
-    // Disable pinch-to-zoom if browser zoom is not allowed
     QVariant allowZoom = SettingsComponent::readPreinitValue(SETTINGS_SECTION_MAIN, "allowBrowserZoom");
-    if (allowZoom.isValid() && !allowZoom.toBool())
-      chromiumFlags << "--disable-pinch";
-
-    if (parser.isSet("ignore-certificate-errors"))
-      chromiumFlags << "--ignore-certificate-errors";
-
-    if (!chromiumFlags.isEmpty())
-      qputenv("QTWEBENGINE_CHROMIUM_FLAGS", chromiumFlags.join(" ").toUtf8());
+    qputenv("QTWEBENGINE_CHROMIUM_FLAGS",
+            chromiumFlags(qEnvironmentVariable("QTWEBENGINE_CHROMIUM_FLAGS"),
+                          parser.isSet("disable-gpu"), allowZoom.isValid() && !allowZoom.toBool(),
+                          parser.isSet("ignore-certificate-errors")).toUtf8());
 
     if (parser.isSet("remote-debugging-port"))
       qputenv("QTWEBENGINE_REMOTE_DEBUGGING", parser.value("remote-debugging-port").toUtf8());
 
     QtWebEngineQuick::initialize();
-    QApplication app(newArgc, newArgv);
+    QApplication app(argc, argv);
 
 #if defined(Q_OS_WIN) 
     // Setting window icon on OSX will break user ability to change it

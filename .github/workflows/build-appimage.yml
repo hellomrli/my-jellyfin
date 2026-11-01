@@ -1,17 +1,25 @@
 name: build-appimage
 
+permissions:
+  contents: read
+
 on:
   workflow_call:
   workflow_dispatch:
   push:
     branches:
+      - main
       - master
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
     - uses: actions/checkout@v7
+    - uses: actions/setup-node@v5
+      with:
+        node-version: '24'
     - name: Build AppImage
       env:
         WORKSPACE: ${{ github.workspace }}
@@ -24,8 +32,29 @@ jobs:
         docker run --rm \
           -v "${WORKSPACE}/output:/host-output" \
           jellyfin-desktop-appimage
+        sudo chown -R "$(id -u):$(id -g)" output
+        mv output/JellyfinDesktop-x86_64.AppImage "output/JellyfinDesktop-$(cat VERSION)-linux-x86_64.AppImage"
+    - name: Verify packaged playback
+      run: |
+        sudo apt-get update
+        sudo apt-get install --yes ffmpeg xvfb
+        cd output
+        chmod +x JellyfinDesktop-*.AppImage
+        ./JellyfinDesktop-*.AppImage --appimage-extract > /dev/null
+        cd ..
+        LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 1280x720x24' \
+          node tests/smoke_packaged_player.cjs output/squashfs-root/AppRun output/playback
+    - name: Archive verification logs
+      if: always()
+      uses: actions/upload-artifact@v7
+      with:
+        name: linux-appimage-test-logs
+        path: |
+          output/playback/**/*.log
+          output/playback/result.json
     - name: Archive production artifacts
       uses: actions/upload-artifact@v7
       with:
         name: linux-appimage-x86_64
         path: ${{ github.workspace }}/output/JellyfinDesktop-*.AppImage
+        if-no-files-found: error

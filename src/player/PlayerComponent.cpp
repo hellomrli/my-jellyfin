@@ -136,6 +136,9 @@ void PlayerComponent::initializeMpv()
   // Disable ytdl
   m_mpv->setProperty( "ytdl", false);
 
+  // Do not let libmpv wait for the next frame on Qt's render/GUI thread.
+  m_mpv->setProperty( "video-timing-offset", 0);
+
   if (SettingsComponent::Get().ignoreSSLErrors()) {
     m_mpv->setProperty( "tls-ca-file", "");
     m_mpv->setProperty( "tls-verify", "no");

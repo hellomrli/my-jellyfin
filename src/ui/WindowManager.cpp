@@ -145,7 +145,7 @@ void WindowManager::initializeWindow(QQuickWindow* window)
   m_webView = m_window->findChild<QQuickItem*>("web");
   if (m_webView)
   {
-    connect(m_webView, SIGNAL(zoomFactorChanged()), this, SLOT(onZoomFactorChanged()));
+    QQmlProperty(m_webView, "zoomFactor").connectNotifySignal(this, SLOT(onZoomFactorChanged()));
     enforceZoom();
   }
 
@@ -327,7 +327,9 @@ void WindowManager::onVisibilityChanged(QWindow::Visibility visibility)
            << "m_previousVisibility=" << m_previousVisibility;
 
   bool isFS = (visibility == QWindow::FullScreen);
-  bool wasFS = (m_previousVisibility == QWindow::FullScreen);
+  // m_previousVisibility is the restore target, not the last fullscreen state.
+  SettingsSection* section = SettingsComponent::Get().getSection(SETTINGS_SECTION_MAIN);
+  bool wasFS = section && section->value("fullscreen").toBool();
 
   // Kiosk mode: force back to fullscreen if user tried to exit
   if (!isFS)
@@ -355,7 +357,6 @@ void WindowManager::onVisibilityChanged(QWindow::Visibility visibility)
   // Update fullscreen setting (in-memory only) when state changes
   if (isFS != wasFS)
   {
-    SettingsSection* section = SettingsComponent::Get().getSection(SETTINGS_SECTION_MAIN);
     if (section)
       section->setValueNoSave("fullscreen", isFS);
 

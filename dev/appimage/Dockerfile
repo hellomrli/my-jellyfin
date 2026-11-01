@@ -3,9 +3,9 @@ FROM archlinux:latest
 # Install build + runtime dependencies (aligned with the AUR PKGBUILD)
 RUN pacman -Syu --noconfirm && \
     pacman -S --noconfirm --needed \
-    base-devel cmake git ninja \
+    base-devel cmake git ninja nodejs \
     qt6-webengine qt6-declarative \
-    mpv mpvqt libcec sdl2 p8-platform protobuf qt6-serialport \
+    mpv libcec sdl2 p8-platform protobuf qt6-serialport \
     wget file patchelf desktop-file-utils && \
     pacman -Scc --noconfirm
 
@@ -23,9 +23,12 @@ RUN cmake -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=/usr \
     -DCMAKE_SKIP_RPATH=1 \
+    -DUSE_STATIC_MPVQT=ON \
+    -DREQUIRE_NODE_TESTS=ON \
     -Wno-dev \
     /src && \
     ninja && \
+    ctest --output-on-failure && \
     ninja install
 
 # -- Build the AppDir (junest-style: ship the full library stack) --
@@ -99,7 +102,7 @@ RUN rm -rf /AppDir/usr/lib/dri \
 # in AppRun can find them all. Uses hard copies, not symlinks.
 RUN find /AppDir/usr/lib -mindepth 2 \( -name '*.so' -o -name '*.so.*' \) | while read lib; do \
         base="$(basename "$lib")" ; \
-        [ ! -e "/AppDir/usr/lib/$base" ] && cp -L "$lib" "/AppDir/usr/lib/$base" ; \
+        if [ ! -e "/AppDir/usr/lib/$base" ]; then cp -L "$lib" "/AppDir/usr/lib/$base"; fi ; \
     done
 
 # Fix absolute-path DT_NEEDED entries (e.g. /usr/lib/libmujs.so).

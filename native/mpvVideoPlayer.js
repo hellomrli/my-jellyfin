@@ -98,10 +98,11 @@
              * @type {boolean}
              */
             this._paused = false;
+            this._waiting = false;
             /**
              * @type {int}
              */
-            this._volume = 100;
+            this._volume = Math.round(this.getSavedVolume() * 100);
             /**
              * @type {boolean}
              */
@@ -149,6 +150,10 @@
              * @private
              */
             this.onPlaying = () => {
+                if (!this._currentPlayOptions) {
+                    return;
+                }
+
                 if (!this._started) {
                     this._started = true;
 
@@ -178,6 +183,8 @@
                     window.api.player.setVideoRectangle(0, 0, 0, 0);
                 }
 
+                this._waiting = false;
+
                 if (this._paused) {
                     this._paused = false;
                     this.events.trigger(this, 'unpause');
@@ -190,13 +197,17 @@
              * @private
              */
             this.onPause = () => {
+                this._waiting = false;
                 this._paused = true;
                 // For Syncplay ready notification
                 this.events.trigger(this, 'pause');
             };
 
             this.onWaiting = () => {
-                this.events.trigger(this, 'waiting');
+                if (this._currentPlayOptions && !this._waiting) {
+                    this._waiting = true;
+                    this.events.trigger(this, 'waiting');
+                }
             };
 
             /**
@@ -244,11 +255,15 @@
         async play(options) {
             this._started = false;
             this._timeUpdated = false;
+            this._waiting = false;
             this._currentTime = null;
+            this._duration = undefined;
             this._bufferedRanges = [];
 
-            this.resetSubtitleOffset();
-            this.captureUiSubtitleSelection(options);
+            if (options.resetSubtitleOffset !== false) {
+                this.resetSubtitleOffset();
+                this.captureUiSubtitleSelection(options);
+            }
             if (options.fullscreen) {
                 this.loading.show();
             }
@@ -263,6 +278,19 @@
          * @private
          */
         captureUiSubtitleSelection(options) {
+            if (this._prePlaySubtitleSelection != null) {
+                return;
+            }
+
+            const itemPlayOptions = options.item?.playOptions;
+            const sameSource = !itemPlayOptions?.mediaSourceId || !options.mediaSource?.Id
+                || itemPlayOptions.mediaSourceId === options.mediaSource.Id;
+            const requestedIndex = options.subtitleStreamIndex ?? (sameSource ? itemPlayOptions?.subtitleStreamIndex : null);
+            if (requestedIndex != null && requestedIndex !== '' && Number.isInteger(Number(requestedIndex))) {
+                this._prePlaySubtitleSelection = Number(requestedIndex);
+                return;
+            }
+
             try {
                 const itemId = options?.item?.Id ? String(options.item.Id).toLowerCase() : null;
                 const hash = window.location.hash || '';
@@ -272,12 +300,17 @@
                 }
 
                 const select = document.querySelector('.selectSubtitles');
-                if (!select) {
+                if (!select || !select.getClientRects().length) {
                     return;
                 }
 
-                const value = parseInt(select.value, 10);
-                if (!Number.isNaN(value)) {
+                const source = document.querySelector('.selectSource');
+                if (source?.value && options.mediaSource?.Id && source.value !== options.mediaSource.Id) {
+                    return;
+                }
+
+                const value = Number(select.value);
+                if (select.value !== '' && Number.isInteger(value)) {
                     this._prePlaySubtitleSelection = value;
                     console.log('[MPV] UI subtitle selection:', value);
                 }
@@ -287,7 +320,9 @@
         }
 
         getSavedVolume() {
-            return this.appSettings.get('volume') || 1;
+            const saved = this.appSettings.get('volume');
+            const volume = saved == null || saved === '' ? 1 : Number(saved);
+            return Number.isFinite(volume) ? Math.max(0, Math.min(volume, 1)) : 1;
         }
 
 
@@ -330,6 +365,20 @@
             return null;
         }
 
+        getAudioStreamSelection(options, index) {
+            if (index != null && index < 0) {
+                return -1;
+            }
+
+            // A transcoded stream contains only the audio selected on the server.
+            // A fallback TranscodingUrl alone does not mean we are transcoding.
+            if (options.playMethod === 'Transcode' || index == null) {
+                return 1;
+            }
+
+            return this.getRelativeIndexByType(options.mediaSource?.MediaStreams || [], index, 'Audio') ?? -1;
+        }
+
         /**
          * @private
          */
@@ -339,7 +388,7 @@
                 this._currentSrc = val;
                 console.debug(`playing url: ${val}`);
 
-                // Convert to seconds
+                // Convert ticks to milliseconds.
                 const ms = (options.playerStartPositionTicks || 0) / 10000;
                 this._currentPlayOptions = options;
 
@@ -373,9 +422,7 @@
                 const streams = options.mediaSource?.MediaStreams || [];
 
                 // Handle audio
-                const audioRelIndex = this._audioTrackIndexToSetOnPlaying != null && this._audioTrackIndexToSetOnPlaying >= 0
-                    ? this.getRelativeIndexByType(streams, this._audioTrackIndexToSetOnPlaying, 'Audio')
-                    : 1;
+                const audioRelIndex = this.getAudioStreamSelection(options, this._audioTrackIndexToSetOnPlaying);
 
                 // Handle subtitle - check for external first
                 let subtitleParam;
@@ -498,8 +545,7 @@
 
             this._audioTrackIndexToSetOnPlaying = index;
 
-            const streams = this._currentPlayOptions?.mediaSource?.MediaStreams || [];
-            const relIndex = index < 0 ? -1 : this.getRelativeIndexByType(streams, index, 'Audio');
+            const relIndex = this.getAudioStreamSelection(this._currentPlayOptions, index);
             console.log('[MPV] Mapped audio index:', index, '->', relIndex);
             window.api.player.setAudioStream(relIndex != null ? relIndex : -1);
         }
@@ -514,6 +560,9 @@
             this._currentTime = null;
             this._currentSrc = null;
             this._currentPlayOptions = null;
+            this._prePlayAudioSelection = null;
+            this._prePlaySubtitleSelection = null;
+            this._waiting = false;
         }
 
         stop(destroyPlayer) {
@@ -552,6 +601,10 @@
 
             const player = window.api.player;
             this._hasConnection = false;
+            this._waiting = false;
+            this._currentPlayOptions = null;
+            this._prePlayAudioSelection = null;
+            this._prePlaySubtitleSelection = null;
             this._bufferedRanges = [];
             player.playing.disconnect(this.onPlaying);
             player.positionUpdate.disconnect(this.onTimeUpdate);
@@ -560,6 +613,7 @@
             player.updateDuration.disconnect(this.onDuration);
             player.error.disconnect(this.onError);
             player.paused.disconnect(this.onPause);
+            player.buffering.disconnect(this.onWaiting);
             player.bufferedRangesUpdated.disconnect(this.onBufferedRangesUpdated);
         }
 
@@ -608,19 +662,8 @@
                     player.updateDuration.connect(this.onDuration);
                     player.error.connect(this.onError);
                     player.paused.connect(this.onPause);
+                    player.buffering.connect(this.onWaiting);
                     player.bufferedRangesUpdated.connect(this.onBufferedRangesUpdated);
-
-                    // Log all other signals
-                    player.buffering.connect((percent) => {
-                        console.log(`[MPV Signal] buffering: ${percent}`);
-                    });
-                    player.canceled.connect(() => console.log('[MPV Signal] canceled'));
-                    player.stopped.connect(() => console.log('[MPV Signal] stopped'));
-                    player.stateChanged.connect((newState, oldState) => console.log(`[MPV Signal] stateChanged: ${oldState} -> ${newState}`));
-                    player.videoPlaybackActive.connect((active) => console.log(`[MPV Signal] videoPlaybackActive: ${active}`));
-                    player.windowVisible.connect((visible) => console.log(`[MPV Signal] windowVisible: ${visible}`));
-                    player.onVideoRecangleChanged.connect(() => console.log('[MPV Signal] onVideoRecangleChanged'));
-                    player.onMetaData.connect((meta) => console.log(`[MPV Signal] onMetaData: ${JSON.stringify(meta)}`));
                 }
 
                 if (options.fullscreen) {
@@ -830,14 +873,19 @@
     }
 
     saveVolume(value) {
-        if (value) {
+        if (Number.isFinite(value)) {
             this.appSettings.set('volume', value);
         }
     }
 
     setVolume(val, save = true) {
+        if (val == null || val === '') {
+            return;
+        }
         val = Number(val);
-        if (!isNaN(val)) {
+        if (Number.isFinite(val)) {
+            // Jellyfin's playback reports require an integer VolumeLevel.
+            val = Math.round(Math.max(0, Math.min(val, 100)));
             this._volume = val;
             if (save) {
                 this.saveVolume(val / 100);
