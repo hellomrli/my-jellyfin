@@ -130,7 +130,8 @@ async function main() {
                 }
                 try {
                     const response = await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(1000) });
-                    page = (await response.json()).find(target => target.type === 'page');
+                    page = (await response.json()).find(target => target.type === 'page'
+                        && target.url === 'qrc:///web-client/extension/find-webclient.html');
                 } catch { /* The WebEngine process may still be starting. */ }
                 if (page) break;
                 await delay(250);
@@ -138,22 +139,46 @@ async function main() {
             assert.ok(page, 'WebEngine debugging target must become available');
             ws = new WebSocket(page.webSocketDebuggerUrl);
             await new Promise((resolve, reject) => { ws.onopen = resolve; ws.onerror = reject; });
-            const reply = new Promise((resolve, reject) => {
+            let requestId = 0;
+            const command = (method, params) => new Promise((resolve, reject) => {
+                const id = ++requestId;
+                if (ws.readyState !== WebSocket.OPEN) return reject(Error('WebEngine debugger is not connected'));
                 ws.onmessage = event => {
                     const data = JSON.parse(event.data);
-                    if (data.id !== 1) return;
-                    if (data.error) reject(Error(JSON.stringify(data.error)));
+                    if (data.id !== id) return;
+                    if (data.error) reject(Object.assign(Error(data.error.message), { code: data.error.code }));
                     else resolve(data.result);
                 };
-                ws.onerror = reject;
+                ws.onerror = () => reject(Error('WebEngine debugger connection failed'));
                 ws.onclose = () => reject(Error('WebEngine closed before the test finished'));
+                ws.send(JSON.stringify({ id, method, params }));
             });
-            ws.send(JSON.stringify({ id: 1, method: 'Runtime.evaluate', params: {
+
+            // DevTools is available before the initial navigation commits. Only
+            // retry this side-effect-free readiness probe, never the playback test.
+            let ready = false;
+            for (let i = 0; i < 150; i++) {
+                try {
+                    const probe = await command('Runtime.evaluate', {
+                        expression: `document.readyState === 'complete'
+                            && typeof window.initCompleted?.then === 'function'
+                            && typeof window._mpvVideoPlayer === 'function'
+                            && typeof window.api?.player?.load === 'function'`,
+                        returnByValue: true
+                    });
+                    assert.ok(!probe.exceptionDetails, JSON.stringify(probe.exceptionDetails));
+                    if (probe.result.value === true) { ready = true; break; }
+                } catch (error) {
+                    if (error.code !== -32000 || !/Execution context was destroyed|Cannot find context/i.test(error.message)) throw error;
+                }
+                await delay(100);
+            }
+            assert.ok(ready, 'Initial web client and native playback bridge must become ready');
+            const evaluated = await command('Runtime.evaluate', {
                 expression: `(${playback.toString()})(${JSON.stringify({
                     directUrl: pathToFileURL(sample).href, transcodeUrl: pathToFileURL(selected).href
                 })})`, awaitPromise: true, returnByValue: true
-            } }));
-            const evaluated = await reply;
+            });
             assert.ok(!evaluated.exceptionDetails, JSON.stringify(evaluated.exceptionDetails));
             return evaluated.result.value;
         };
