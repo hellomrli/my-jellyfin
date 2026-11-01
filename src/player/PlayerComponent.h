@@ -119,8 +119,8 @@ public:
 
   Q_INVOKABLE void setPlaybackRate(int rate);
 
-  Q_INVOKABLE qint64 getPosition();
-  Q_INVOKABLE qint64 getDuration();
+  Q_INVOKABLE qint64 getPosition(); // Milliseconds, as expected by currentTimeAsync/SyncPlay.
+  Q_INVOKABLE qint64 getDuration(); // Seconds, used by the native taskbar integration.
 
   Q_INVOKABLE QVariantList getWebPlaylist() const;
   Q_INVOKABLE QString getCurrentWebPlaylistItemId() const;

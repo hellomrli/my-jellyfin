@@ -26,9 +26,9 @@ The links below are upstream Jellyfin Desktop builds from `master`, not builds o
 
 本地修改版（详见 [`VERSION`](VERSION)），Windows 构建步骤与踩坑记录见 [BUILD-Windows.md](BUILD-Windows.md)。
 
-本次重点修复播放链路：转码音轨映射、零音量与整数音量上报、缓冲事件、字幕延迟保留、
+本次重点修复播放链路：转码音轨映射、SyncPlay 进度单位、零音量与整数音量上报、缓冲事件、字幕延迟保留、
 MPV 初始化时序、重复监听和内置 MpvQt 参数内存泄漏，以及 WebEngine 透明层和全屏状态同步。
-Windows/macOS 默认构建升级至 **Qt 6.12.0**；配套 **Qt WebEngine 6.140.0-rc 仍为候选版**，
+Windows 默认构建升级至 **Qt 6.12.0**；配套 **Qt WebEngine 6.140.0-rc 仍为候选版**，
 可显式回退至 6.11.3 / 6.9.3。依赖来源和验证边界见 [dev/README.md](dev/README.md#qt-toolchain)，
 播放验收清单见 [CONTRIBUTING.md](CONTRIBUTING.md#playback-acceptance-checklist)。
 

@@ -10,6 +10,8 @@
 - [`dev/install-qt.py`](dev/install-qt.py) 修正新版 Windows 仓库路径，并选择上述配套 WebEngine，
   避免普通 `aqt -m qtwebengine` 下载到旧的 7 月构建。底层仍由固定版本 aqt 完成下载、校验和解压。
 - libmpv 跟随上游更新至 `20261018-git-01e2533f31`，保留 AVX2 主版本与非 AVX2 回退 DLL。
+- 已核对上游最新提交 [`6ba5b98`](https://github.com/jellyfin/jellyfin-desktop/commit/6ba5b9814f2d655b12b4e26b659817d7546c2cde)（2026-11-01），
+  吸收转码音轨修复与 SyncPlay 播放进度的秒/毫秒单位修复，保留本分支的音轨和字幕选择增强。
 - 已完成 Linux 上 Qt 6.12.0 全量编译、自动测试和本地播放冒烟测试；Windows 的完整 Qt 下载清单及两份 MPV 压缩包已核对。
   Windows/MSVC 构建、单元测试、独立安装包播放及安装/卸载由本仓库 Actions 在 Windows 上验证，
   只有检查成功的产物才会发布；具体结果见对应版本的发布页和 Actions 日志。

@@ -331,4 +331,12 @@ for (const kind of ['video', 'audio']) {
         await f[kind].play({ ...options(), playerStartPositionTicks: 123450000 });
         assert.equal(f.lastCall('load')[2].startMilliseconds, 12345);
     });
+
+    test(`${kind}: asynchronous SyncPlay positions preserve native milliseconds`, async () => {
+        const f = fixture();
+        for (const position of [0, 12345, 9876543]) {
+            f.native.getPosition = callback => callback(position);
+            assert.equal(await f[kind].currentTimeAsync(), position);
+        }
+    });
 }

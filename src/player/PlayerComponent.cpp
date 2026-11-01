@@ -1137,7 +1137,7 @@ qint64 PlayerComponent::getPosition()
   }
   QVariant time = m_mpv->getProperty( "playback-time");
   if (time.canConvert<double>())
-    return time.toDouble();
+    return static_cast<qint64>(time.toDouble() * 1000.0);
   return 0;
 }
 

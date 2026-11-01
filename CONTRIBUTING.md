@@ -60,7 +60,7 @@ python dev/install-qt.py windows desktop 6.12.0 win64_msvc2022_64 \
 
 The JS tests cover direct/transcoded audio mapping, embedded/external subtitles,
 pre-play selections, subtitle offset on stream reload, integer/zero volume,
-buffering events, signal cleanup and playback-state reset.
+buffering events, signal cleanup, playback-state reset and SyncPlay position units.
 
 ### Packaged Playback Smoke Test
 
@@ -73,7 +73,8 @@ node tests/smoke_packaged_player.cjs /path/to/application /tmp/player-smoke
 
 Linux can use Xvfb. The test drives the injected playback adapter through a local
 WebEngine debugger, checks MPV's selected audio IDs, pause/resume/seek, zero volume
-and subtitle delay. Its single-track file simulates transcoding output; it does
+and subtitle delay. It also verifies that the native SyncPlay position is in
+milliseconds. Its single-track file simulates transcoding output; it does
 not exercise a real server's transcoder, network, hardware decoding or audio output.
 
 Windows CI runs `tests/verify_windows_package.ps1` after packaging. It hides the

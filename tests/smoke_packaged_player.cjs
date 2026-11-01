@@ -23,7 +23,6 @@ async function playback({ directUrl, transcodeUrl }) {
     const settings = new Map([['volume', 0.29]]);
     const events = [];
     let playingCount = 0;
-    const nativeValue = method => new Promise(resolve => window.api.player[method](resolve));
     const player = new window._mpvVideoPlayer({
         events: { trigger(_player, name) { events.push(name); if (name === 'playing') playingCount++; } },
         loading: { show() {}, hide() {} }, appRouter: { showVideoOsd() {} },
@@ -49,8 +48,9 @@ async function playback({ directUrl, transcodeUrl }) {
     player.unpause();
     await waitFor(() => !player.paused());
     player.currentTime(5000);
-    // The UI updates optimistically when seeking; this getter reads native seconds.
-    await waitFor(async () => await nativeValue('getPosition') >= 5);
+    // SyncPlay uses the native position getter, which must return milliseconds.
+    await waitFor(async () => await player.currentTimeAsync() >= 5000);
+    const seekPosition = await player.currentTimeAsync();
     player.setVolume(0);
     const nativeVolume = await new Promise(resolve => window.api.player.volume(resolve));
     player.setSubtitleOffset(1.5);
@@ -61,14 +61,14 @@ async function playback({ directUrl, transcodeUrl }) {
     await waitFor(async () => {
         const duration = player.duration();
         if (playingCount <= previousPlayingCount || !(duration >= 8500 && duration <= 10000)) return false;
-        const position = await nativeValue('getPosition');
-        return position >= 1 && position < 5;
+        const position = await player.currentTimeAsync();
+        return position >= 1000 && position < 5000;
     });
     window.api.player.userCommand('print-text "SMOKE_TRANSCODE_AID=${=aid}"');
     const transcode = { duration: player.duration(), position: player.currentTime(), volume: player.getVolume(), offset: player.getSubtitleOffset() };
     await player.stop(true);
     await sleep(500);
-    return { direct, transcode, nativeVolume, savedVolume: settings.get('volume'), events };
+    return { direct, transcode, seekPosition, nativeVolume, savedVolume: settings.get('volume'), events };
 }
 
 async function main() {
@@ -162,6 +162,7 @@ async function main() {
         })]);
         assert.ok(result.direct.duration >= 14000);
         assert.equal(result.direct.volume, 29);
+        assert.ok(result.seekPosition >= 5000 && result.seekPosition < 15000, 'SyncPlay positions must be in milliseconds');
         assert.equal(result.nativeVolume, 0);
         assert.equal(result.savedVolume, 0);
         assert.ok(result.transcode.duration >= 8500 && result.transcode.duration <= 10000);
