@@ -7,6 +7,11 @@ find_path(VCRUNTIME_DIR vcruntime140.dll
   NO_DEFAULT_PATH
   DOC "Directory containing the redistributable MSVC runtime DLLs")
 
+find_path(BUNDLED_FONTS_DIR NotoSansCJKsc-Regular.otf
+  PATHS "${CMAKE_SOURCE_DIR}/dev/windows/deps/fonts" "${CMAKE_SOURCE_DIR}/deps/fonts"
+  NO_DEFAULT_PATH
+  DOC "Directory containing the pinned Noto subtitle fonts and licenses")
+
 find_library(WINMM winmm)
 find_library(IMMLIB imm32)
 find_library(VERLIB version)

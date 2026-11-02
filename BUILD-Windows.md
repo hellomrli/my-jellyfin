@@ -14,6 +14,8 @@
 - [`dev/install-qt.py`](dev/install-qt.py) 修正新版 Windows 仓库路径，并选择上述配套 WebEngine，
   避免普通 `aqt -m qtwebengine` 下载到旧的 7 月构建。底层仍由固定版本 aqt 完成下载、校验和解压。
 - libmpv 跟随上游更新至 `20261018-git-01e2533f31`，保留 AVX2 主版本与非 AVX2 回退 DLL。
+- 内置 Noto Sans CJK SC / Noto Serif CJK SC 常规与粗体字幕字体，使用固定上游提交及 SHA-256 校验，
+  字体原文件和 SIL OFL 1.1 许可证均随包附带，不修改系统字体。来源见 [`dev/fonts.json`](dev/fonts.json)。
 - 已核对上游最新提交 [`6ba5b98`](https://github.com/jellyfin/jellyfin-desktop/commit/6ba5b9814f2d655b12b4e26b659817d7546c2cde)（2026-11-01），
   吸收转码音轨修复与 SyncPlay 播放进度的秒/毫秒单位修复，保留本分支的音轨和字幕选择增强。
 - 已完成 Linux 上 Qt 6.12.0 全量编译、自动测试和本地播放冒烟测试；Windows 的完整 Qt 下载清单及两份 MPV 压缩包已核对。
@@ -30,6 +32,7 @@
 | Python | 3.13 | 脚本创建独立虚拟环境，安装 `aqtinstall==3.3.0` |
 | Qt | `6.12.0` `msvc2022_64`，需 `qtwebengine qtwebchannel qtpositioning qtserialport` | 用仓库安装适配脚本，不要混入旧 WebEngine |
 | libmpv 开发包 | mpv-dev `x86_64-v3` 和 `x86_64` | 版本见 [`dev/mpv-version.txt`](dev/mpv-version.txt) |
+| Noto CJK 字体 | Sans / Serif，SC，Regular / Bold | `dev/install-fonts.py` 按 `dev/fonts.json` 下载并校验 |
 | Inno Setup | 6.x | 只有打安装包才需要，`ISCC.exe` 要在 PATH |
 | 7-Zip | 较新版本 | 解压依赖；MSVC 的 `dumpbin`/`lib` 用于生成 import lib |
 | Node.js | 18+，推荐受支持的 LTS | 可选，但运行 JavaScript 播放回归测试时必需，CI 强制启用 |
@@ -52,7 +55,8 @@ dev\windows\bundle.bat
 ```
 
 依赖安装到 `dev/windows/deps/`，构建目录是 `build/`。重跑 `setup.bat` 可修复不完整的 Qt/WebEngine 安装，
-并在 MPV 版本变更时更新 DLL、头文件和 import lib。切换 Qt 版本时请使用干净的构建目录，避免混用旧 CMake 缓存。
+校验或修复字幕字体，并在 MPV 版本变更时更新 DLL、头文件和 import lib。
+切换 Qt 版本时请使用干净的构建目录，避免混用旧 CMake 缓存。
 
 若优先使用无 RC 标记的配套组件，可以在同一终端中显式选择 6.11.3：
 
@@ -74,6 +78,7 @@ dev\windows\test.bat
 py -3.13 -m venv dev\windows\deps\python
 dev\windows\deps\python\Scripts\python -m pip install -r dev\requirements-build.txt
 dev\windows\deps\python\Scripts\python dev\install-qt.py windows desktop 6.12.0 win64_msvc2022_64 -m qtwebengine qtwebchannel qtpositioning qtserialport -O C:\Qt
+dev\windows\deps\python\Scripts\python dev\install-fonts.py -O dev\windows\deps\fonts
 ```
 
 解压匹配版本的 mpv-dev 包，得到 `include/` 和 `libmpv-2.dll`。
@@ -106,6 +111,8 @@ cmake -G Ninja -S . -B build ^
 
 `QTROOT` 里的路径用正斜杠。CMake 应打印 `Qt version: 6.12.0` 与 `Qt WebEngine version: 6.140.0`。
 打包还需要准备非 AVX2 回退 DLL、VC 运行库，具体参考 `dev/windows/setup.bat`。
+字体默认从 `dev/windows/deps/fonts` 或 `deps/fonts` 查找，也可用 `-DBUNDLED_FONTS_DIR=绝对路径` 指定；
+构建目录和发行包都复制同一份字体。打包时缺少字体/许可证或校验不一致会直接失败，不发布残缺包。
 配置成功时 CMake 会打印
 `Windows installer target configured: windows_package`、`Windows portable ZIP target configured: windows_zip`、
 `Windows combined target configured: windows_all`。
@@ -140,10 +147,22 @@ ninja -C build windows_all
 - **非 AVX2 回退**：启动时通过 delay-load 选择 `libmpv-fallback.dll`，不删除或重命名主 DLL，支持只读安装目录。
   排查回退路径时可设置 `JELLYFIN_MPV_FORCE_FALLBACK=1`，测试完成后清除该变量。
 - **安装包验证**：CI 解压 ZIP 到含空格的目录、隐藏开发用 Qt、测试两种 MPV DLL，再测试 EXE 静默安装、播放和卸载。
+  同时校验字体/许可证哈希，并禁用字幕的系统字体提供器，实际渲染含中英、繁体、日/韩文字的 SRT 和 ASS，
+  核对四种字体选择、默认/显式/手动字体配置及 ASS 样式保留，避免只检查文件存在却没有真正加载。
   对应脚本是 `tests/verify_windows_package.ps1`，需要 Node.js 22+、FFmpeg 和桌面会话。
 - **更新与签名**：发行构建关闭上游更新提示，避免误装回上游版本；从本仓库 Releases 更新。
   未配置 Windows 代码签名证书，系统可能显示未知发布者，请核对发布页 SHA-256。
 - **ARM64**：本次仅适配 Windows x64；ARM64 交叉编译和打包未验证，CI 仍禁用。
+
+## 6. 字体使用
+
+- 字幕设置的 `Default` / `Sans-Serif` 默认选用内置 Noto Sans CJK SC，`Serif` 选用 Noto Serif CJK SC；
+  两个完整字体名称也可直接选择。若程序旁没有字体目录，则保留系统字体回退行为。
+- 字体仅作用于 SRT 等无指定字体的字幕；不启用强制 ASS 样式覆盖，不禁用影片内嵌字体。
+  原有系统字体和“手动 MPV 配置”仍可使用，例如 `sub-font=Microsoft YaHei`（需要电脑已安装该字体）。
+- 主界面继续遵循系统字体和服务器网页字体；本次不将整个网页强制改成 Noto。
+- 只附带两种常用开源字族的常规/粗体，不打包所有字重或未经授权的商业字体。
+  `fonts/` 保存字体，`licenses/fonts/` 保存原许可证和包含来源/哈希的清单，卸载时随程序删除。
 
 播放验收清单见 [CONTRIBUTING.md](CONTRIBUTING.md#playback-acceptance-checklist)，
 依赖的官方来源和版本策略见 [dev/README.md](dev/README.md#qt-toolchain)。

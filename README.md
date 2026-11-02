@@ -34,11 +34,22 @@ Windows 默认构建升级至 **Qt 6.12.0**；配套 **Qt WebEngine 6.140.0-rc �
 
 正式版发布名称与 Git 标签为 [`v2.0.4-Lain自用版`](https://github.com/hellomrli/my-jellyfin/releases/tag/v2.0.4-Lain%E8%87%AA%E7%94%A8%E7%89%88)，
 程序内部版本号及安装包文件名使用 `2.0.4-Lain`，避免中文进入 Windows 构建脚本和 HTTP 版本标识。
-应用按正式版发布不改变配套 WebEngine 仍为 RC 的事实，依赖版本与已测试的预发布版保持一致。
+应用按正式版发布不改变配套 WebEngine 仍为 RC 的事实，Qt/MPV 版本与已测试的预发布版保持一致。
 Windows 安装版和便携版均携带运行库，非 AVX2 回退不再改写安装目录；
 CI 检查打包后的实际播放、静默安装/卸载及回退 DLL。**本次仅编译和发布 Windows x64 客户端**，
 macOS/Linux 构建保留为手动任务，不随提交自动运行。
 发行构建关闭指向上游的更新检查，请从本仓库 Releases 获取更新。
+
+### 字体
+
+Windows 安装版和便携版均内置 **Noto Sans CJK SC（黑体风格）**、**Noto Serif CJK SC（宋体风格）**，
+各含常规和粗体，供原生播放器的字幕使用。字体放在程序旁的 `fonts/`，不安装到 Windows 系统中。
+普通 SRT 等无指定字体的字幕默认使用 Noto Sans；字幕设置中的 `Serif` 使用 Noto Serif，也可直接选择这两个字体名称。
+保留 ASS 的字体/粗细样式及视频内嵌字体，手动 MPV 配置仍可覆盖默认选项。
+
+连接页和原生界面继续使用系统字体；Jellyfin 主界面还可使用服务器提供的网页字体，不强行改成字幕字体。
+新增字体来自 [Noto CJK](https://github.com/notofonts/noto-cjk)，以 SIL OFL 1.1 许可原样附带，
+校验清单及许可证位于 `licenses/fonts/`。不附带无再分发授权的微软雅黑、宋体、Arial 等微软字体。
 
 ## Building
 See [dev/](dev/) for platform-specific build instructions.

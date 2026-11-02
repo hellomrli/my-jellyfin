@@ -142,6 +142,19 @@ set_target_properties(${MAIN_TARGET} PROPERTIES
 copy_resources(${MAIN_TARGET})
 clang_tidy(${MAIN_TARGET})
 
+if(WIN32 AND BUNDLED_FONTS_DIR)
+  set_property(TARGET ${MAIN_TARGET} APPEND PROPERTY LINK_DEPENDS
+    "${CMAKE_SOURCE_DIR}/dev/fonts.json" "${CMAKE_SOURCE_DIR}/CMakeModules/DeployFonts.cmake")
+  add_custom_command(TARGET ${MAIN_TARGET} POST_BUILD
+    COMMAND ${CMAKE_COMMAND}
+      "-DFONT_SOURCE_DIR=${BUNDLED_FONTS_DIR}"
+      "-DFONT_DESTINATION=$<TARGET_FILE_DIR:${MAIN_TARGET}>"
+      -P "${CMAKE_SOURCE_DIR}/CMakeModules/DeployFonts.cmake"
+    COMMENT "Deploying verified application-local subtitle fonts"
+    VERBATIM
+  )
+endif()
+
 # Workaround for Qt Creator locating incorrect Qt version via DYLD_FRAMEWORK_PATH.
 # This forces the build to load qt.conf's paths instead, which should be correct.
 if(APPLE AND MACOS_LAUNCH_WRAPPER)

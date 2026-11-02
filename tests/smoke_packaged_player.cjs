@@ -8,7 +8,7 @@ const { spawn, spawnSync } = require('node:child_process');
 const { pathToFileURL } = require('node:url');
 const { setTimeout: delay } = require('node:timers/promises');
 
-async function playback({ directUrl, transcodeUrl }) {
+async function playback({ directUrl, transcodeUrl, fontTests }) {
     const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
     const waitFor = async predicate => {
         for (let i = 0; i < 150; i++) {
@@ -20,6 +20,10 @@ async function playback({ directUrl, transcodeUrl }) {
     await window.initCompleted;
     await sleep(750);
     window.api.player.userCommand('set ao null');
+    const mpvCommand = command => new Promise(resolve => window.api.player.userCommand(command, resolve));
+    const setSetting = (section, key, value) => new Promise(resolve => window.api.settings.setValue(section, key, value, resolve));
+    // No system font may satisfy the Windows bundle test.
+    if (fontTests) await mpvCommand('set sub-font-provider none');
     const settings = new Map([['volume', 0.29]]);
     const events = [];
     let playingCount = 0;
@@ -43,6 +47,39 @@ async function playback({ directUrl, transcodeUrl }) {
     await waitFor(() => playingCount > 0 && player.currentTime() > 500);
     window.api.player.userCommand('print-text "SMOKE_DIRECT_AID=${=aid}"');
     const direct = { duration: player.duration(), position: player.currentTime(), volume: player.getVolume() };
+    if (fontTests) {
+        const renderFrames = async () => {
+            const start = await player.currentTimeAsync();
+            await waitFor(async () => await player.currentTimeAsync() >= start + 600);
+        };
+        const reportFont = name => mpvCommand(`print-text "SMOKE_SUB_FONT_${name}=\${sub-font}"`);
+        await mpvCommand('print-text "SMOKE_SUB_FONT_PROVIDER=${sub-font-provider}"');
+        await reportFont('DEFAULT');
+        await mpvCommand('print-text SMOKE_FONT_SRT_BEGIN');
+        await mpvCommand(`sub-add ${JSON.stringify(fontTests.plainUrl)} select`);
+        await renderFrames();
+        await mpvCommand('print-text SMOKE_FONT_SRT_END');
+        await setSetting('subtitles', 'font', 'Noto Serif CJK SC');
+        await reportFont('EXPLICIT');
+        await renderFrames();
+        await setSetting('subtitles', 'font', '');
+        await reportFont('RESET');
+        await renderFrames();
+        await setSetting('subtitles', 'font', 'serif');
+        await reportFont('SERIF');
+        await setSetting('other', 'other_conf', 'sub-font=Noto Serif CJK SC');
+        await setSetting('subtitles', 'font', 'sans-serif');
+        await reportFont('MANUAL');
+        await setSetting('other', 'other_conf', '');
+        await reportFont('SANS');
+        // ASS explicitly requests both families and weights; sub-font must not replace them.
+        await mpvCommand('print-text SMOKE_FONT_ASS_BEGIN');
+        await mpvCommand(`sub-add ${JSON.stringify(fontTests.assUrl)} select`);
+        await renderFrames();
+        await mpvCommand('print-text SMOKE_FONT_ASS_END');
+        await mpvCommand('print-text "SMOKE_ASS_OVERRIDE=${sub-ass-override}"');
+        await mpvCommand('print-text "SMOKE_EMBEDDED_FONTS=${embeddedfonts}"');
+    }
     player.pause();
     await waitFor(() => player.paused());
     player.unpause();
@@ -79,6 +116,23 @@ async function main() {
     fs.mkdirSync(config, { recursive: true });
     const sample = path.join(output, 'sample.mkv');
     const selected = path.join(output, 'selected.mkv');
+    let fontTests;
+    if (process.platform === 'win32') {
+        const text = '\u5b57\u5e55 ABC 123 \u7e41\u9ad4 \u65e5\u672c\u8a9e \ud55c\uad6d\uc5b4';
+        const plain = path.join(output, 'Chinese subtitle.srt');
+        const ass = path.join(output, 'Styled subtitle.ass');
+        fs.writeFileSync(plain, `1\n00:00:00,000 --> 00:00:15,000\n${text}\n`, 'utf8');
+        const styles = [
+            ['SansRegular', 'Noto Sans CJK SC', 0], ['SansBold', 'Noto Sans CJK SC', -1],
+            ['SerifRegular', 'Noto Serif CJK SC', 0], ['SerifBold', 'Noto Serif CJK SC', -1]
+        ];
+        fs.writeFileSync(ass, `[Script Info]\nScriptType: v4.00+\nPlayResX: 640\nPlayResY: 360\n\n[V4+ Styles]\n`
+            + 'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n'
+            + styles.map(([name, family, bold]) => `Style: ${name},${family},24,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,${bold},0,0,0,100,100,0,0,1,1,0,7,10,10,10,1`).join('\n')
+            + '\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n'
+            + styles.map(([name], index) => `Dialogue: 0,0:00:00.00,0:00:15.00,${name},,0,0,0,,{\\pos(20,${20 + index * 70})}${text}`).join('\n') + '\n', 'utf8');
+        fontTests = { plainUrl: pathToFileURL(plain).href, assUrl: pathToFileURL(ass).href };
+    }
     function ffmpeg(args) {
         const result = spawnSync('ffmpeg', ['-nostdin', '-loglevel', 'error', '-y', ...args], {
             encoding: 'utf8', timeout: 60000
@@ -176,7 +230,7 @@ async function main() {
             assert.ok(ready, 'Initial web client and native playback bridge must become ready');
             const evaluated = await command('Runtime.evaluate', {
                 expression: `(${playback.toString()})(${JSON.stringify({
-                    directUrl: pathToFileURL(sample).href, transcodeUrl: pathToFileURL(selected).href
+                    directUrl: pathToFileURL(sample).href, transcodeUrl: pathToFileURL(selected).href, fontTests
                 })})`, awaitPromise: true, returnByValue: true
             });
             assert.ok(!evaluated.exceptionDetails, JSON.stringify(evaluated.exceptionDetails));
@@ -220,6 +274,39 @@ async function main() {
     assert.ok(!/No such signal/.test(log), 'Broken Qt signal connection; see application.log');
     if (env.JELLYFIN_MPV_FORCE_FALLBACK === '1') {
         assert.ok(/Using fallback libmpv/.test(log), 'The baseline MPV DLL must actually be loaded');
+    }
+    if (fontTests) {
+        assert.ok(/Using bundled subtitle fonts:/.test(log), 'Application-local fonts must be configured');
+        assert.ok(/SMOKE_SUB_FONT_PROVIDER=none\b/.test(log), 'Subtitle test must not use system fonts');
+        const expectedFonts = {
+            DEFAULT: 'Noto Sans CJK SC', EXPLICIT: 'Noto Serif CJK SC', RESET: 'Noto Sans CJK SC',
+            SERIF: 'Noto Serif CJK SC', MANUAL: 'Noto Serif CJK SC', SANS: 'Noto Sans CJK SC'
+        };
+        for (const [name, font] of Object.entries(expectedFonts)) {
+            assert.ok(log.includes(`SMOKE_SUB_FONT_${name}=${font}`), `Wrong subtitle font for ${name}`);
+        }
+        const fontLog = format => {
+            const start = log.indexOf(`SMOKE_FONT_${format}_BEGIN`);
+            const end = log.indexOf(`SMOKE_FONT_${format}_END`, start);
+            assert.ok(start >= 0 && end > start, `${format} font test must complete`);
+            return log.slice(start, end);
+        };
+        const selectedFont = name => new RegExp(`fontselect: [^\\r\\n]* -> [^\\r\\n]*\\b${name}\\b`);
+        assert.ok(selectedFont('NotoSansCJKsc-Regular').test(fontLog('SRT')), 'SRT must render using bundled Noto Sans');
+        const assLog = fontLog('ASS');
+        const renderedFonts = [];
+        for (const family of ['Sans', 'Serif']) {
+            for (const weight of ['Regular', 'Bold']) {
+                const name = `Noto${family}CJKsc-${weight}`;
+                assert.ok(selectedFont(name).test(assLog),
+                    `Bundled font must actually render subtitles: ${name}`);
+                renderedFonts.push(name);
+            }
+        }
+        assert.ok(/SMOKE_ASS_OVERRIDE=(?:no|yes|scale)\b/.test(log), 'ASS styles must not be forced or stripped');
+        assert.ok(/SMOKE_EMBEDDED_FONTS=yes\b/.test(log), 'Embedded subtitle fonts must remain enabled');
+        assert.ok(!/fontselect: failed|Glyph .* not found|failed to find any fallback/i.test(log), 'Missing subtitle glyphs');
+        result.fonts = { systemFontsDisabled: true, renderedFonts, mappings: expectedFonts, assStylesPreserved: true, embeddedFontsEnabled: true };
     }
     fs.writeFileSync(path.join(output, 'result.json'), JSON.stringify(result, null, 2));
     console.log(JSON.stringify(result, null, 2));

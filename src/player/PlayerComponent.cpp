@@ -139,6 +139,20 @@ void PlayerComponent::initializeMpv()
   // Do not let libmpv wait for the next frame on Qt's render/GUI thread.
   m_mpv->setProperty( "video-timing-offset", 0);
 
+#if defined(Q_OS_WIN)
+  // libass must see app-local fonts before the first subtitle decoder is created.
+  const QDir fontDir(Paths::resourceDir("fonts"));
+  if (fontDir.exists("NotoSansCJKsc-Regular.otf") && fontDir.exists("NotoSerifCJKsc-Regular.otf"))
+  {
+    const int result = m_mpv->setProperty("sub-fonts-dir", fontDir.absolutePath());
+    m_bundledSubtitleFonts = result >= 0;
+    if (m_bundledSubtitleFonts)
+      qInfo() << "Using bundled subtitle fonts:" << fontDir.absolutePath();
+    else
+      qWarning() << "Failed to configure bundled subtitle fonts:" << mpv_error_string(result);
+  }
+#endif
+
   if (SettingsComponent::Get().ignoreSSLErrors()) {
     m_mpv->setProperty( "tls-ca-file", "");
     m_mpv->setProperty( "tls-verify", "no");
@@ -1356,10 +1370,17 @@ void PlayerComponent::setSubtitleConfiguration()
   }
 
   QString font = SettingsComponent::Get().value(SETTINGS_SECTION_SUBTITLES, "font").toString();
-  if (!font.isEmpty())
+  if (font.isEmpty())
+    font = "sans-serif";
+  if (m_bundledSubtitleFonts)
   {
-    m_mpv->setProperty( "sub-font", font);
+    if (font == "sans-serif")
+      font = "Noto Sans CJK SC";
+    else if (font == "serif")
+      font = "Noto Serif CJK SC";
   }
+  // sub-font affects unstyled subtitles; do not force ASS styles or embedded fonts.
+  m_mpv->setProperty( "sub-font", font);
 
   QString color = SettingsComponent::Get().value(SETTINGS_SECTION_SUBTITLES, "color").toString();
   if (!color.isEmpty())

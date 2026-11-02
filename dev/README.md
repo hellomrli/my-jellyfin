@@ -54,6 +54,35 @@ Official references:
 
 See [CONTRIBUTING.md](../CONTRIBUTING.md) for automated tests and the playback acceptance checklist.
 
+## Bundled Windows Subtitle Fonts
+
+Windows packages include unmodified Noto Sans CJK SC and Noto Serif CJK SC,
+Regular and Bold. `fonts.json` pins each font and its SIL Open Font License 1.1
+to an immutable Noto CJK commit and SHA-256 digest. No Microsoft fonts are redistributed.
+The Windows setup script and CI run:
+
+```sh
+python dev/install-fonts.py -O deps/fonts
+python dev/install-fonts.py -O deps/fonts --check
+```
+
+CMake locates `dev/windows/deps/fonts` or `deps/fonts`, or accepts an explicit
+`BUNDLED_FONTS_DIR`. It verifies every font/license before deploying them next to
+the build-tree executable and in both Windows packages. The `fonts/` directory
+contains only fonts; `licenses/fonts/` holds the licenses and source manifest.
+Fonts are application-local, never installed into the system font directory.
+
+MPV receives `sub-fonts-dir` before any media is opened. Default/Sans-Serif maps to
+Noto Sans and Serif maps to Noto Serif when bundled fonts are available. Explicit
+font selections and manual MPV settings remain supported. ASS font styles and
+embedded fonts are not forced off. QML/connection-page system fonts and fonts
+provided by the Jellyfin server's web UI are deliberately unchanged.
+
+Package tests disable the subtitle system-font provider and verify actual libass
+font selection for Chinese/CJK SRT and ASS using all four fonts, not just file presence.
+The downloader's offline/cache/integrity checks run with
+`python -m unittest discover -s tests -p 'test_install_*.py'` alongside Qt adapter tests.
+
 ## Web Debugger
 
 To get browser devtools, use remote debugging:

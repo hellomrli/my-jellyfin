@@ -12,6 +12,8 @@ $installer = Join-Path $build "JellyfinDesktop-$version-x64.exe"
 $zip = Join-Path $build "JellyfinDesktop-$version-x64.zip"
 $portable = Join-Path $output "Portable with spaces"
 $installed = Join-Path $output "Installed with spaces"
+$fontManifestPath = Join-Path $PSScriptRoot "../dev/fonts.json"
+$fontManifest = Get-Content $fontManifestPath -Raw | ConvertFrom-Json
 
 function Assert-Package([string]$directory) {
     foreach ($file in @(
@@ -31,6 +33,17 @@ function Assert-Package([string]$directory) {
     if ($config -notmatch '(?m)^Prefix\s*=\s*\.\s*$' -or
         $config -notmatch '(?m)^Plugins\s*=\s*plugins\s*$') {
         throw "qt.conf must point to package-local dependencies"
+    }
+    $packagedManifest = Join-Path $directory "licenses/fonts/manifest.json"
+    if ((Get-FileHash $packagedManifest).Hash -ne (Get-FileHash $fontManifestPath).Hash) {
+        throw "Packaged font manifest differs from the source manifest"
+    }
+    foreach ($entry in $fontManifest.files) {
+        $folder = if ($entry.kind -eq "font") { "fonts" } else { "licenses/fonts" }
+        $filename = Join-Path $directory "$folder/$($entry.name)"
+        if ((Get-FileHash $filename).Hash -ne $entry.sha256) {
+            throw "Missing or corrupt packaged font/license: $filename"
+        }
     }
 }
 
@@ -83,11 +96,19 @@ try {
     }
 }
 $installedExecutable = Join-Path $installed "Jellyfin Desktop.exe"
-for ($attempt = 0; $attempt -lt 25 -and (Test-Path $installedExecutable); $attempt++) {
+for ($attempt = 0; $attempt -lt 25 -and (
+    (Test-Path $installedExecutable) -or (Test-Path (Join-Path $installed "fonts")) -or
+    (Test-Path (Join-Path $installed "licenses/fonts"))
+); $attempt++) {
     Start-Sleep -Milliseconds 200
 }
 if (Test-Path $installedExecutable) {
     throw "Silent uninstall did not remove the application"
 }
+foreach ($folder in @("fonts", "licenses/fonts")) {
+    if (Test-Path (Join-Path $installed $folder)) {
+        throw "Silent uninstall did not remove packaged fonts/licenses: $folder"
+    }
+}
 Get-FileHash $installer, $zip | Format-Table -AutoSize
-Write-Host "Installer, portable playback, and non-destructive MPV fallback verified."
+Write-Host "Installer, portable playback, bundled fonts, and non-destructive MPV fallback verified."

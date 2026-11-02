@@ -28,6 +28,7 @@ dev\windows\test.bat
 - Python 3.13, isolated aqtinstall 3.3.0, Qt 6.12.0
 - Matching Qt WebEngine **6.140.0-rc** from the versioned repository
 - libmpv (AVX2 + fallback), VC++ redistributable
+- Noto Sans CJK SC / Noto Serif CJK SC subtitle fonts (Regular + Bold, SIL OFL 1.1)
 - MinGW, WiX (for packaging)
 
 The RC label is significant: the default is the newest Qt kit, not an entirely
@@ -46,6 +47,9 @@ dev\windows\test.bat
 Use a clean build directory when switching Qt versions. `set QT_VERSION=` restores
 the shared default. Version 6.9.3 is another explicit fallback. Setup can be rerun
 to repair a partial Qt/WebEngine installation and update pinned MPV dependencies.
+It also verifies or repairs the app-local subtitle fonts; no fonts are installed
+into Windows. See [font packaging](../README.md#bundled-windows-subtitle-fonts)
+for the source manifest, licensing, and subtitle-versus-web-UI behavior.
 
 ## Directory Structure
 

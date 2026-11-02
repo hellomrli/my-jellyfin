@@ -75,9 +75,9 @@ jobs:
           -m qtwebengine qtwebchannel qtpositioning qtserialport -O "$RUNNER_TEMP/Qt"
         echo "QT_ROOT_DIR=$RUNNER_TEMP/Qt/$QT_VERSION/msvc2022_64" >> "$GITHUB_ENV"
         echo "$RUNNER_TEMP/Qt/$QT_VERSION/msvc2022_64/bin" >> "$GITHUB_PATH"
-    - name: Test Qt installer adapter
+    - name: Test dependency installers
       shell: bash
-      run: python -m unittest discover -s tests -p 'test_install_qt.py'
+      run: python -m unittest discover -s tests -p 'test_install_*.py'
     - name: Install packaging and smoke-test tools
       run: |
         choco install innosetup ffmpeg -y --no-progress
@@ -114,6 +114,9 @@ jobs:
         if (-not $vsRedist) { throw "MSVC redistributable DLLs not found" }
         Copy-Item "$vsRedist\*.dll" deps/vcruntime/
       shell: powershell
+    - name: Download pinned subtitle fonts and licenses
+      shell: bash
+      run: python dev/install-fonts.py -O deps/fonts
     - name: Build
       run: |
         set "VS_PATH="

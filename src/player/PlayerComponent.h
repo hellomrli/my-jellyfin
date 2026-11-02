@@ -246,6 +246,7 @@ private:
   void reselectStream(const QVariant &streamSelection, MediaType target);
 
   MpvController* m_mpv = nullptr;
+  bool m_bundledSubtitleFonts = false;
 
   State m_state;
   bool m_paused;

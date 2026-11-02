@@ -80,6 +80,10 @@ not exercise a real server's transcoder, network, hardware decoding or audio out
 Windows CI runs `tests/verify_windows_package.ps1` after packaging. It hides the
 development Qt kit, tests the portable package's primary and baseline MPV DLLs,
 checks neither DLL was modified, and tests silent install/playback/uninstall.
+It verifies the bundled Noto fonts/licenses against `dev/fonts.json`, disables
+the subtitle system-font provider, and requires actual libass font selection for
+both families and weights using CJK SRT/ASS fixtures. It also checks default/reset,
+explicit and manual font settings without forcing ASS styles or disabling attachments.
 macOS CI verifies the DMG, audits bundled Mach-O dependencies and minimum OS with
 `tests/verify_macos_bundle.py`, checks the ad-hoc signature and runs the smoke test
 on the extracted app without the development Qt kit. Verification logs are kept
