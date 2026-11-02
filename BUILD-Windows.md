@@ -1,6 +1,10 @@
 # Windows 本地构建说明
 
-本仓库是 jellyfin-desktop 的本地修改版，版本号见 [`VERSION`](VERSION)（当前 `2.0.4-Lain-rc1`）。
+本仓库是 jellyfin-desktop 的本地修改版，版本号见 [`VERSION`](VERSION)（当前 `2.0.4-Lain`）。
+
+正式版发布名称与 Git 标签为 `v2.0.4-Lain自用版`。中文用于 GitHub 发布名称和标签；
+程序内部版本号及安装包文件名保留 ASCII，Windows 数值版本信息为 `2.0.4.0`。
+本次从已测试的预发布版转为正式发布，不更换 Qt/MPV 依赖，也不将 WebEngine 的 RC 组件标记为稳定版。
 
 ## 当前依赖与验证范围（2026-11-02）
 
@@ -116,8 +120,8 @@ ninja -C build windows_all
 测试时将所选 Qt 的 `bin/` 和 MPV DLL 目录加入 PATH，再运行 `ctest --test-dir build --output-on-failure`。
 推荐流程中的 `test.bat` 会自动设置这些路径。打包产物在 `build/` 下：
 
-- `JellyfinDesktop-2.0.4-Lain-rc1-x64.exe` —— Inno Setup 安装包
-- `JellyfinDesktop-2.0.4-Lain-rc1-x64.zip` —— 便携版
+- `JellyfinDesktop-2.0.4-Lain-x64.exe` —— Inno Setup 安装包
+- `JellyfinDesktop-2.0.4-Lain-x64.zip` —— 便携版
 - `output/` —— 可直接运行的目录（`Jellyfin Desktop.exe` + Qt/libmpv 等 DLL）
 
 ## 5. 已知坑

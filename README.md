@@ -32,7 +32,10 @@ Windows 默认构建升级至 **Qt 6.12.0**；配套 **Qt WebEngine 6.140.0-rc �
 可显式回退至 6.11.3 / 6.9.3。依赖来源和验证边界见 [dev/README.md](dev/README.md#qt-toolchain)，
 播放验收清单见 [CONTRIBUTING.md](CONTRIBUTING.md#playback-acceptance-checklist)。
 
-`2.0.4-Lain-rc1` 按预发布版交付。Windows 安装版和便携版均携带运行库，非 AVX2 回退不再改写安装目录；
+正式版发布名称与 Git 标签为 [`v2.0.4-Lain自用版`](https://github.com/hellomrli/my-jellyfin/releases/tag/v2.0.4-Lain%E8%87%AA%E7%94%A8%E7%89%88)，
+程序内部版本号及安装包文件名使用 `2.0.4-Lain`，避免中文进入 Windows 构建脚本和 HTTP 版本标识。
+应用按正式版发布不改变配套 WebEngine 仍为 RC 的事实，依赖版本与已测试的预发布版保持一致。
+Windows 安装版和便携版均携带运行库，非 AVX2 回退不再改写安装目录；
 CI 检查打包后的实际播放、静默安装/卸载及回退 DLL。**本次仅编译和发布 Windows x64 客户端**，
 macOS/Linux 构建保留为手动任务，不随提交自动运行。
 发行构建关闭指向上游的更新检查，请从本仓库 Releases 获取更新。
