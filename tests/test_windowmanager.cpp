@@ -12,6 +12,9 @@ private slots:
   void fullscreenExit_data();
   void fullscreenExit();
   void repeatedFullscreenSessions();
+  void raisePreservesWindowState_data();
+  void raisePreservesWindowState();
+  void raiseRestoresMinimizedWindow();
 
 private:
   SettingsSection* m_main = nullptr;
@@ -69,6 +72,47 @@ void TestWindowManager::repeatedFullscreenSessions()
                                      Q_ARG(QWindow::Visibility, visibility)));
     QCOMPARE(m_main->value("fullscreen").toBool(), visibility == QWindow::FullScreen);
   }
+}
+
+void TestWindowManager::raisePreservesWindowState_data()
+{
+  QTest::addColumn<QWindow::Visibility>("visibility");
+  QTest::addColumn<bool>("hidden");
+  QTest::newRow("windowed") << QWindow::Windowed << false;
+  QTest::newRow("maximized") << QWindow::Maximized << false;
+  QTest::newRow("fullscreen") << QWindow::FullScreen << false;
+  QTest::newRow("hidden-windowed") << QWindow::Windowed << true;
+  QTest::newRow("hidden-maximized") << QWindow::Maximized << true;
+  QTest::newRow("hidden-fullscreen") << QWindow::FullScreen << true;
+}
+
+void TestWindowManager::raisePreservesWindowState()
+{
+  QFETCH(QWindow::Visibility, visibility);
+  QFETCH(bool, hidden);
+  QQuickWindow window;
+  WindowManager manager;
+  manager.m_window = &window;
+  window.setVisibility(visibility);
+  const auto state = window.windowState();
+  if (hidden)
+    window.hide();
+
+  manager.raiseWindow();
+  QCOMPARE(window.visibility(), visibility);
+  QCOMPARE(window.windowState(), state);
+}
+
+void TestWindowManager::raiseRestoresMinimizedWindow()
+{
+  QQuickWindow window;
+  WindowManager manager;
+  manager.m_window = &window;
+  window.showMinimized();
+  manager.raiseWindow();
+  QVERIFY(window.isVisible());
+  QCOMPARE(window.visibility(), QWindow::Windowed);
+  QCOMPARE(window.windowState(), Qt::WindowNoState);
 }
 
 QTEST_MAIN(TestWindowManager)

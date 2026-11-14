@@ -14,19 +14,24 @@ Windows/macOS setup scripts and CI share these pins:
 | Component | Default | Source of truth |
 | --- | --- | --- |
 | Qt | 6.12.0 | `qt-version.txt` |
-| Qt WebEngine for Qt 6.12 | **6.140.0-rc** (repository channel `61400`) | `install-qt.py` |
+| Qt WebEngine for Qt 6.12 | **6.140.0** (repository channel `61400`) | `install-qt.py` and official repository metadata |
 | aqtinstall | 3.3.0 | `requirements-build.txt` |
 | Windows libmpv | 20261018-git-01e2533f31 | `mpv-version.txt` |
 
-Qt 6.12.0 is the latest official Qt release checked on 2026-11-01. Its WebEngine
-package is versioned separately and is still labelled **RC** in the official repository.
-Do not describe this combination as an entirely stable stack. CMake reports Core
+As checked on 2026-11-14, Qt 6.12.0 remains the latest publicly released stable
+version. Its matching WebEngine package was updated on 2026-11-11 and is officially
+labelled **Qt WebEngine 6.140.0**, without an RC suffix. The installer build version
+is `6.12.0-0-202611110526`, belonging to the Qt 6.12.0 kit. CMake reports Core
 `6.12.0` and WebEngine `6.140.0`; the different version numbers are expected.
+The `2.0.4-Lain` release used the earlier WebEngine RC package; the updated
+package is selected for `2.0.5-Lain` builds.
 
 Use `install-qt.py`, not plain `aqt install-qt`, with the pinned Python requirements.
 The adapter handles the new Windows base-package path and the versioned WebEngine
 repository, avoiding an obsolete July WebEngine build selected by ordinary aqt.
 It delegates package parsing, download verification, extraction and relocation to aqt.
+Each installation reads the build version and installation directory from official
+metadata, allowing package revisions in the same channel without changing the Qt Core pin.
 If the matching package is missing, installation fails rather than silently mixing versions.
 Supported installer targets are Windows x64, Linux x64 and universal macOS.
 
@@ -36,8 +41,8 @@ target from the chosen Qt kit and uses the same value in the application Info.pl
 Other dependencies, such as Homebrew's libmpv bottles, may require a newer OS.
 The release CI therefore sets macOS 15.0 explicitly and verifies bundled libraries.
 
-For a non-RC WebEngine pairing, explicitly set `QT_VERSION=6.11.3`; `6.9.3` is also
-available as the conservative upstream baseline. Keep this environment override
+For an older kit when investigating compatibility, explicitly set `QT_VERSION=6.11.3`;
+`6.9.3` is also available as the conservative upstream baseline. Keep this environment override
 for setup, build, run, test and bundle scripts, and use a clean build directory when
 switching kits. Windows/macOS Actions also accept a `qt_version` input; empty uses
 the shared pin. There is no automatic downgrade. Linux distribution builds still
@@ -48,11 +53,15 @@ that all Qt/WebEngine memory regressions, including QTBUG-141377, are resolved.
 Retest long playback sessions before distributing builds with a new kit.
 
 Official references:
+- [Current Qt 6.12 releases](https://download.qt.io/official_releases/qt/6.12/)
 - [Qt 6.12.0 release files](https://download.qt.io/official_releases/qt/6.12/6.12.0/)
-- [WebEngine channel label](https://download.qt.io/online/qtsdkrepository/linux_x64/extensions/qtwebengine/6120/61400/main/Updates.xml)
+- [Windows WebEngine channel label](https://download.qt.io/online/qtsdkrepository/windows_x86/extensions/qtwebengine/6120/61400/main/Updates.xml)
+- [Windows WebEngine package metadata](https://download.qt.io/online/qtsdkrepository/windows_x86/extensions/qtwebengine/6120/61400/msvc2022_64/Updates.xml)
 - [Qt 6.12 macOS requirements](https://doc.qt.io/qt-6.12/macos.html)
 
 See [CONTRIBUTING.md](../CONTRIBUTING.md) for automated tests and the playback acceptance checklist.
+Application changes reviewed through upstream `6482a5f` (2026-11-14) are recorded
+in [UPSTREAM.md](../UPSTREAM.md); that sync does not change the dependency pins above.
 
 ## Bundled Windows Subtitle Fonts
 

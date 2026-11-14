@@ -137,14 +137,13 @@ void TaskbarComponentWin::setControlsVisible(bool value)
 /////////////////////////////////////////////////////////////////////////////////////////
 void TaskbarComponentWin::setProgress(quint64 value)
 {
-  if (m_button) {
-    qint64 duration = PlayerComponent::Get().getDuration();
-    int progress = 0;
-    if (duration != 0) {
-      progress = (int) (value / duration / 10);
-    }
-    m_button->progress()->setValue(progress);
-  }
+  if (!m_button) return;
+
+  const qint64 duration = PlayerComponent::Get().getDuration();
+  const int progress = duration > 0
+      ? static_cast<int>(qBound(0.0, static_cast<double>(value) * 100.0 / duration, 100.0))
+      : 0;
+  m_button->progress()->setValue(progress);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////

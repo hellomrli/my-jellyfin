@@ -23,6 +23,7 @@ class AlbumArtProvider;
 class PlayerComponent : public ComponentBase
 {
   Q_OBJECT
+  Q_PROPERTY(bool videoWindowVisible READ isVideoWindowVisible NOTIFY windowVisible)
   DEFINE_SINGLETON(PlayerComponent);
 
 public:
@@ -119,8 +120,12 @@ public:
 
   Q_INVOKABLE void setPlaybackRate(int rate);
 
-  Q_INVOKABLE qint64 getPosition(); // Milliseconds, as expected by currentTimeAsync/SyncPlay.
-  Q_INVOKABLE qint64 getDuration(); // Seconds, used by the native taskbar integration.
+  // Cached from observed mpv properties, both in milliseconds.
+  Q_INVOKABLE qint64 getPosition();
+  Q_INVOKABLE qint64 getDuration();
+
+  // Video output remains visible while paused, but not during audio-only playback.
+  Q_INVOKABLE bool isVideoWindowVisible() const { return m_windowVisible; }
 
   Q_INVOKABLE QVariantList getWebPlaylist() const;
   Q_INVOKABLE QString getCurrentWebPlaylistItemId() const;
@@ -194,8 +199,8 @@ Q_SIGNALS:
   void updateDuration(qint64 milliseconds);
   void playbackRateChanged(double rate);
 
-  // current position in ms should be triggered 2 times a second
-  // when position updates
+  // Notify after at least 100 ms of playback movement. getPosition() keeps the
+  // most recent observed value for callers such as SyncPlay between notifications.
   void positionUpdate(quint64);
 
   void onVideoRecangleChanged();
@@ -224,6 +229,8 @@ Q_SIGNALS:
   void bufferedRangesUpdated(const QVariantList& ranges);
 
 private:
+  friend class TestPlayerComponent;
+
   // this is the function actually implemented in the backends. the variantmap contains
   // a few known keys:
   // * subtitleStreamIndex
@@ -236,6 +243,7 @@ private:
   void setQtQuickWindow(QQuickWindow* window);
   void updatePlaybackState();
   void handleMpvEvent(mpv_event *event);
+  void resetPlaybackTime();
   // Potentially switch the display refresh rate, and return true if the refresh rate
   // was actually changed.
   bool switchDisplayFrameRate();
@@ -258,7 +266,9 @@ private:
   QString m_playbackError;
   int m_bufferingPercentage;
   int m_lastBufferingPercentage;
-  double m_lastPositionUpdate;
+  qint64 m_durationMs;
+  qint64 m_positionMs;
+  qint64 m_lastPositionUpdateMs;
   qint64 m_playbackAudioDelay;
   QQuickWindow* m_window;
   float m_mediaFrameRate;

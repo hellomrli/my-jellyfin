@@ -19,14 +19,15 @@ class MetadataArchives(install_qt.DesktopArchives):
         self.requests = []
         super().__init__(*args, **kwargs)
 
-    def _package(self, name, archives):
+    def _package(self, name, archives, package_version=None):
         directory = {"linux": "gcc_64", "mac": "macos", "windows": "msvc2022_64"}[self.os_name]
+        package_version = package_version or f"{self.version}-0-202609281005"
         operations = "".join(
             f'<Operation name="Extract"><Argument>@TargetDir@/{self.version}/{directory}</Argument>'
             f'<Argument>{archive}</Argument></Operation>' for archive in archives
         )
         return (
-            f"<Updates><PackageUpdate><Name>{name}</Name><Version>{self.version}-0-202609281005</Version>"
+            f"<Updates><PackageUpdate><Name>{name}</Name><Version>{package_version}</Version>"
             f"<Operations>{operations}</Operations></PackageUpdate></Updates>"
         )
 
@@ -40,7 +41,8 @@ class MetadataArchives(install_qt.DesktopArchives):
                 raise ArchiveDownloadError("Versioned WebEngine metadata unavailable")
             return self._package(
                 f"extensions.qtwebengine.6120.61400.{self.arch}",
-                ["qtwebengine-new.7z", "qtwebview_qtwebengine_plugin.7z"]
+                ["qtwebengine-new.7z", "qtwebview_qtwebengine_plugin.7z"],
+                package_version="6.12.0-0-202611110526",
             )
         if "/extensions/qtwebengine/" in path:
             return self._package(f"extensions.qtwebengine.{compact_version}.{self.arch}", ["qtwebengine-old.7z"])
@@ -65,6 +67,10 @@ class TestQtInstaller(unittest.TestCase):
                 self.assertIn(f"{repository_host}/extensions/qtwebengine/6120/61400/{repository_arch}/", engine.archive_path)
                 self.assertEqual(engine.archive, "qtwebengine-new.7z")
                 self.assertEqual(engine.archive_install_path, f"6.12.0/{directory}")
+                for package in result.archives:
+                    if "/61400/" in package.archive_path:
+                        self.assertTrue(package.archive_path.endswith(f"/6.12.0-0-202611110526{package.archive}"))
+                        self.assertEqual(package.archive_install_path, f"6.12.0/{directory}")
                 self.assertFalse(any(package.archive == "qtwebengine-old.7z" for package in result.archives))
                 self.assertEqual(len(result.archives), 3)
                 if host == "windows":

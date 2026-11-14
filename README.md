@@ -24,19 +24,28 @@ The links below are upstream Jellyfin Desktop builds from `master`, not builds o
 
 ## This fork
 
-本地修改版（详见 [`VERSION`](VERSION)），Windows 构建步骤与踩坑记录见 [BUILD-Windows.md](BUILD-Windows.md)。
+本地修改版，当前版本为 `2.0.5-Lain`（详见 [`VERSION`](VERSION)）。
+Windows 构建步骤与踩坑记录见 [BUILD-Windows.md](BUILD-Windows.md)。
 
-本次重点修复播放链路：转码音轨映射、SyncPlay 进度单位、零音量与整数音量上报、缓冲事件、字幕延迟保留、
-MPV 初始化时序、重复监听和内置 MpvQt 参数内存泄漏，以及 WebEngine 透明层和全屏状态同步。
-Windows 默认构建升级至 **Qt 6.12.0**；配套 **Qt WebEngine 6.140.0-rc 仍为候选版**，
-可显式回退至 6.11.3 / 6.9.3。依赖来源和验证边界见 [dev/README.md](dev/README.md#qt-toolchain)，
+已同步上游至 [`6482a5f`](https://github.com/jellyfin/jellyfin-desktop/commit/6482a5f36dbac74cec03caddde41adf60056ae78)（2026-11-14）：
+播放进度通知按 100 毫秒媒体时间间隔发送，SyncPlay 仍可读取最近的原生进度；支持 Esc 退出正在播放或暂停的视频全屏，
+修正 Windows 任务栏进度与调试信息，并自动将类型错误的音频设备配置修复为 `auto`。
+切换或结束文件时清空原生进度/时长缓存，重新激活窗口时保留全屏或最大化状态；
+修复日志初始化和轮转可能引发的启动卡死，日志不可写时仍可启动。逐项同步记录见 [UPSTREAM.md](UPSTREAM.md)。
+
+保留转码音轨映射、SyncPlay 进度单位、零音量与整数音量上报、缓冲事件、字幕延迟保留、
+MPV 初始化时序、重复监听和内置 MpvQt 参数内存泄漏修复，以及 WebEngine 透明层和全屏状态同步。
+Windows 默认构建使用截至 2026-11-14 最新公开正式版 **Qt 6.12.0**；
+配套 **Qt WebEngine 6.140.0** 的官方包已于 2026-11-11 更新并去掉 RC 标记。
+可显式回退至 6.11.3 / 6.9.3。依赖来源和验证记录见 [dev/README.md](dev/README.md#qt-toolchain)，
 播放验收清单见 [CONTRIBUTING.md](CONTRIBUTING.md#playback-acceptance-checklist)。
 
-正式版发布名称与 Git 标签为 [`v2.0.4-Lain自用版`](https://github.com/hellomrli/my-jellyfin/releases/tag/v2.0.4-Lain%E8%87%AA%E7%94%A8%E7%89%88)，
-程序内部版本号及安装包文件名使用 `2.0.4-Lain`，避免中文进入 Windows 构建脚本和 HTTP 版本标识。
-应用按正式版发布不改变配套 WebEngine 仍为 RC 的事实，Qt/MPV 版本与已测试的预发布版保持一致。
+本轮正式版发布名称与 Git 标签采用 `v2.0.5-Lain自用版`，下载及验证结果见
+[本仓库 Releases](https://github.com/hellomrli/my-jellyfin/releases)。
+程序内部版本号及安装包文件名使用 `2.0.5-Lain`，避免中文进入 Windows 构建脚本和 HTTP 版本标识。
+已发布的 `2.0.4-Lain` 使用发布时标记为 RC 的 WebEngine 包；上述新组件用于本轮构建。
 Windows 安装版和便携版均携带运行库，非 AVX2 回退不再改写安装目录；
-CI 检查打包后的实际播放、静默安装/卸载及回退 DLL。**本次仅编译和发布 Windows x64 客户端**，
+CI 检查打包后的实际播放、静默安装/卸载及回退 DLL。**自动构建和发行包面向 Windows x64 客户端**，
 macOS/Linux 构建保留为手动任务，不随提交自动运行。
 发行构建关闭指向上游的更新检查，请从本仓库 Releases 获取更新。
 

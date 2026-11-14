@@ -48,7 +48,7 @@ class DesktopArchives(QtArchives):
             "online/qtsdkrepository", host, "extensions/qtwebengine/6120/61400", repository_arch
         )
         package = f"extensions.qtwebengine.6120.61400.{package_arch}"
-        self.logger.warning("Qt 6.12.0 uses the separately packaged Qt WebEngine 6.140.0-rc (61400 channel).")
+        self.logger.info("Selecting the Qt 6.12.0 WebEngine package from the versioned 6120/61400 repository.")
         metadata = self._download_update_xml(posixpath.join(repository, "Updates.xml"))
         self._parse_update_xmls(
             [UpdateXmls(repository, metadata)], ModuleToPackage({"qtwebengine": [package]})

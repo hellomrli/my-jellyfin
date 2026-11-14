@@ -74,6 +74,8 @@ private slots:
   void updateOpenGLInfo();
 
 private:
+  friend class TestWindowManager;
+
   // Geometry (separate size/position)
   void loadGeometry();
   QRect loadGeometryRect();

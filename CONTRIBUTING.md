@@ -62,6 +62,19 @@ The JS tests cover direct/transcoded audio mapping, embedded/external subtitles,
 pre-play selections, subtitle offset on stream reload, integer/zero volume,
 buffering events, signal cleanup, playback-state reset and SyncPlay position units.
 
+The native `test_playercomponent` suite covers millisecond position/duration caches,
+100 ms position notifications, unavailable properties and file boundaries, reactive
+video visibility while paused, audio-device repair saved to an isolated profile,
+and disconnected-device recovery. These checks do not require a real audio device.
+
+The native window-manager suite also checks that raising a visible or hidden window
+preserves fullscreen/maximized state and restores a minimized window. It uses Qt's
+offscreen platform and software scene graph, so it does not require a GPU.
+The logging suite runs initialization/rotation scenarios in child processes with a
+five-second deadline. It checks missing or blocked log directories, repeated rotation,
+rotation after cleanup, log retention, and token masking without replacing Qt Test's
+own message handler.
+
 ### Packaged Playback Smoke Test
 
 With Node.js 22+, FFmpeg and a desktop session, run the actual application with
@@ -74,7 +87,9 @@ node tests/smoke_packaged_player.cjs /path/to/application /tmp/player-smoke
 Linux can use Xvfb. The test drives the injected playback adapter through a local
 WebEngine debugger, checks MPV's selected audio IDs, pause/resume/seek, zero volume
 and subtitle delay. It also verifies that the native SyncPlay position is in
-milliseconds. Its single-track file simulates transcoding output; it does
+milliseconds, native duration uses the same units, paused video stays visible,
+invalid audio-device settings reach MPV as `auto`, and stopping clears the native
+timeline and video output. Its single-track file simulates transcoding output; it does
 not exercise a real server's transcoder, network, hardware decoding or audio output.
 
 Windows CI runs `tests/verify_windows_package.ps1` after packaging. It hides the
@@ -165,7 +180,7 @@ a real Jellyfin server and the target operating system after a Qt/libmpv upgrade
 - Forced transcoding: select a non-default original audio track, switch it during playback, change bitrate and seek; the single output audio track must remain audible and in sync.
 - Subtitles: switch embedded/external/off selections, select a different media source on the details page, set an offset and reload the stream; preserve the offset on reload and reset it for a new item.
 - Volume and buffering: set volume to zero and restart playback, restore 29%, test slow networking and SyncPlay pause/resume; verify server playback reports and UI buffering indicators.
-- Lifecycle and UI: repeatedly start/stop and advance episodes, navigate between servers, toggle fullscreen from windowed/maximized mode and observe memory over a long session; check for a white WebEngine layer covering MPV.
+- Lifecycle and UI: repeatedly start/stop and advance episodes, navigate between servers, toggle fullscreen from windowed/maximized mode and observe memory over a long session; check for a white WebEngine layer covering MPV. Test Esc with playing/paused video, including starting video after entering fullscreen, and verify it reaches the web UI when browsing or playing only audio.
 - Hardware: test supported hardware decoders, high-bitrate 4K, refresh-rate switching, HDMI audio passthrough and device changes on real Windows/macOS/Linux machines; compare with an older Qt kit if a regression appears.
 
 Record Qt Core/WebEngine/libmpv versions, OS, GPU/driver, playback method and logs.

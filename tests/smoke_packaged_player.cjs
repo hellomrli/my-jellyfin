@@ -22,6 +22,7 @@ async function playback({ directUrl, transcodeUrl, fontTests }) {
     window.api.player.userCommand('set ao null');
     const mpvCommand = command => new Promise(resolve => window.api.player.userCommand(command, resolve));
     const setSetting = (section, key, value) => new Promise(resolve => window.api.settings.setValue(section, key, value, resolve));
+    const nativeValue = method => new Promise(resolve => window.api.player[method](resolve));
     // No system font may satisfy the Windows bundle test.
     if (fontTests) await mpvCommand('set sub-font-provider none');
     const settings = new Map([['volume', 0.29]]);
@@ -46,7 +47,11 @@ async function playback({ directUrl, transcodeUrl, fontTests }) {
     await player.play(opts);
     await waitFor(() => playingCount > 0 && player.currentTime() > 500);
     window.api.player.userCommand('print-text "SMOKE_DIRECT_AID=${=aid}"');
-    const direct = { duration: player.duration(), position: player.currentTime(), volume: player.getVolume() };
+    const direct = {
+        duration: player.duration(), nativeDuration: await nativeValue('getDuration'),
+        position: player.currentTime(), volume: player.getVolume(),
+        videoVisible: await nativeValue('isVideoWindowVisible')
+    };
     if (fontTests) {
         const renderFrames = async () => {
             const start = await player.currentTimeAsync();
@@ -82,6 +87,13 @@ async function playback({ directUrl, transcodeUrl, fontTests }) {
     }
     player.pause();
     await waitFor(() => player.paused());
+    const pausedVideoVisible = await nativeValue('isVideoWindowVisible');
+    // Reproduce the malformed persisted setting that used to break audio output.
+    await setSetting('audio', 'device', false);
+    await waitFor(() => window.jmpInfo.settings.audio.device === 'auto');
+    const repairedAudioDevice = await new Promise(resolve => window.api.settings.value('audio', 'device', resolve));
+    await mpvCommand('print-text "SMOKE_AUDIO_DEVICE=${=audio-device}"');
+    const repairedAudioDeviceInWeb = window.jmpInfo.settings.audio.device;
     player.unpause();
     await waitFor(() => !player.paused());
     player.currentTime(5000);
@@ -102,10 +114,21 @@ async function playback({ directUrl, transcodeUrl, fontTests }) {
         return position >= 1000 && position < 5000;
     });
     window.api.player.userCommand('print-text "SMOKE_TRANSCODE_AID=${=aid}"');
-    const transcode = { duration: player.duration(), position: player.currentTime(), volume: player.getVolume(), offset: player.getSubtitleOffset() };
+    const transcode = {
+        duration: player.duration(), nativeDuration: await nativeValue('getDuration'),
+        position: player.currentTime(), volume: player.getVolume(), offset: player.getSubtitleOffset()
+    };
     await player.stop(true);
-    await sleep(500);
-    return { direct, transcode, seekPosition, nativeVolume, savedVolume: settings.get('volume'), events };
+    await waitFor(async () => await nativeValue('getPosition') === 0
+        && await nativeValue('getDuration') === 0 && !await nativeValue('isVideoWindowVisible'));
+    const stopped = {
+        position: await nativeValue('getPosition'), duration: await nativeValue('getDuration'),
+        videoVisible: await nativeValue('isVideoWindowVisible')
+    };
+    return {
+        direct, transcode, stopped, pausedVideoVisible, repairedAudioDevice, repairedAudioDeviceInWeb,
+        seekPosition, nativeVolume, savedVolume: settings.get('volume'), events
+    };
 }
 
 async function main() {
@@ -240,13 +263,22 @@ async function main() {
             timer = setTimeout(() => reject(Error('Packaged playback test timed out')), 90000);
         })]);
         assert.ok(result.direct.duration >= 14000);
+        assert.ok(Math.abs(result.direct.nativeDuration - result.direct.duration) <= 1,
+            'Native taskbar duration must use milliseconds');
         assert.equal(result.direct.volume, 29);
+        assert.equal(result.direct.videoVisible, true);
+        assert.equal(result.pausedVideoVisible, true);
+        assert.equal(result.repairedAudioDevice, 'auto');
+        assert.equal(result.repairedAudioDeviceInWeb, 'auto');
         assert.ok(result.seekPosition >= 5000 && result.seekPosition < 15000, 'SyncPlay positions must be in milliseconds');
         assert.equal(result.nativeVolume, 0);
         assert.equal(result.savedVolume, 0);
         assert.ok(result.transcode.duration >= 8500 && result.transcode.duration <= 10000);
+        assert.ok(Math.abs(result.transcode.nativeDuration - result.transcode.duration) <= 1,
+            'A new file must replace the cached native duration');
         assert.equal(result.transcode.volume, 0);
         assert.equal(result.transcode.offset, 1.5);
+        assert.deepEqual(result.stopped, { position: 0, duration: 0, videoVisible: false });
         for (const event of ['playing', 'pause', 'unpause', 'stopped']) assert.ok(result.events.includes(event), event);
         assert.ok(!result.events.includes('error'));
     } finally {
@@ -271,6 +303,7 @@ async function main() {
     readLogs(config);
     assert.ok(/SMOKE_DIRECT_AID=2\b/.test(log), 'Wrong direct-play audio ID; see application.log');
     assert.ok(/SMOKE_TRANSCODE_AID=1\b/.test(log), 'Wrong transcoded audio ID; see application.log');
+    assert.ok(/SMOKE_AUDIO_DEVICE=auto\b/.test(log), 'Repaired audio device must reach MPV');
     assert.ok(!/No such signal/.test(log), 'Broken Qt signal connection; see application.log');
     if (env.JELLYFIN_MPV_FORCE_FALLBACK === '1') {
         assert.ok(/Using fallback libmpv/.test(log), 'The baseline MPV DLL must actually be loaded');

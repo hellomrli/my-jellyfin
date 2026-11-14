@@ -84,9 +84,7 @@ Window
   }
 
   function restoreWindow() {
-    mainWindow.show()
-    mainWindow.raise()
-    mainWindow.requestActivate()
+    components.window.raiseWindow()
   }
 
   function runWebAction(action)
@@ -104,6 +102,15 @@ Window
       return "F11"
     }
     onTriggered: mainWindow.toggleFullscreen()
+  }
+
+  Action
+  {
+    enabled: mainWindow.webDesktopMode
+             && mainWindow.visibility === Window.FullScreen
+             && components.player.videoWindowVisible
+    shortcut: "Escape"
+    onTriggered: components.window.setFullScreen(false)
   }
 
   Action

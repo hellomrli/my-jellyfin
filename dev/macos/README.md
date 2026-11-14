@@ -25,20 +25,21 @@ dev/macos/test.sh
 `setup.sh` installs everything else:
 - CMake 3.25+, Ninja, create-dmg
 - Python 3.13, isolated aqtinstall 3.3.0, Qt 6.12.0
-- Matching Qt WebEngine **6.140.0-rc** from the versioned repository
+- Matching Qt WebEngine **6.140.0** from the versioned repository (package updated 2026-11-11)
 - mpv
 
 The default kit supports macOS **14.4+** on both Intel and Apple Silicon. CMake
 uses the selected kit's deployment minimum for compiler flags and Info.plist;
 an explicitly lower `CMAKE_OSX_DEPLOYMENT_TARGET` is rejected. Homebrew dependencies
 may require a newer OS. See [Qt toolchain policy](../README.md#qt-toolchain) for
-official sources and the important WebEngine RC caveat.
+official sources and the current WebEngine package information.
 
 Release CI deliberately targets **macOS 15+** to match its Homebrew dependencies,
 and audits the native architecture and minimum OS of every bundled Mach-O image.
 DMGs are ad-hoc signed for bundle integrity, not Developer ID signed or notarized.
 
-For the non-RC pairing, keep this override set while using all development scripts:
+For an older kit when investigating compatibility, keep this override set while
+using all development scripts:
 
 ```bash
 export QT_VERSION=6.11.3

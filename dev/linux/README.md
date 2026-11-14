@@ -40,8 +40,9 @@ ctest --test-dir build --output-on-failure
 ```
 
 Use CMake 3.25+ and a clean build directory rather than reusing one configured for
-system Qt. The matching WebEngine is **6.140.0-rc**, not a stable module release;
-read the [Qt toolchain policy](../README.md#qt-toolchain) before choosing this kit.
+system Qt. The matching WebEngine is **6.140.0**; the official package was updated
+on 2026-11-11 and no longer carries an RC label. See the
+[Qt toolchain policy](../README.md#qt-toolchain) for sources and package details.
 For an explicit fallback, replace `QT_VERSION` with `6.11.3` or `6.9.3` and rebuild.
 The input-node memory fix requires bundled MpvQt; installing system MpvQt does not
 apply the patch in `external/mpvqt`.

@@ -6,6 +6,11 @@
 
 #include <QtQml>
 #include <QGuiApplication>
+#include <QDir>
+#include <QFile>
+#include <QRecursiveMutex>
+#include <QScopedValueRollback>
+#include <QUuid>
 #include <iostream>
 
 #include "shared/Names.h"
@@ -18,7 +23,9 @@ int fileLogLevel = 1;  // info
 int terminalLogLevel = 3;  // error
 QHash<QtMsgType, int> messageLevelValue({{QtDebugMsg, 0}, {QtInfoMsg, 1}, {QtWarningMsg, 2}, {QtCriticalMsg, 3}, {QtFatalMsg, 4}});
 
-static QMutex logMutex;
+// Qt file APIs can log a warning while rotation already holds the mutex.
+// The message handler must be able to acquire it again on the same thread.
+static QRecursiveMutex logMutex;
 static QFile* logFile = nullptr;
 static QString tempLogPath;
 
@@ -26,6 +33,17 @@ static QString tempLogPath;
 // adapted from https://stackoverflow.com/a/62390212
 static void qtMessageOutput(QtMsgType type, const QMessageLogContext& context, const QString& msg)
 {
+  static thread_local bool inLogger = false;
+  if (inLogger)
+  {
+    QString terminalMsg = msg;
+    Log::CensorAuthTokens(terminalMsg);
+    std::cerr << qPrintable(terminalMsg) << std::endl;
+    if (type == QtFatalMsg)
+      abort();
+    return;
+  }
+  QScopedValueRollback<bool> guard(inLogger, true);
   QMutexLocker lock(&logMutex);
 
   // Check if message meets any output threshold
@@ -98,18 +116,20 @@ void Log::Init()
   qInstallMessageHandler(qtMessageOutput);
 
   // Create unique log file for this instance
-  QString logDir = getLogDir();
-  QTemporaryFile tempFile(logDir + "/jellyfin-desktop-XXXXXX.log");
-  tempFile.setAutoRemove(false);
-  if (!tempFile.open())
-  {
-    qFatal("Failed to create temporary log file");
-  }
-  tempLogPath = tempFile.fileName();
-  tempFile.close();
+  const QString logDir = getLogDir();
+  QDir().mkpath(logDir);
+  tempLogPath = QString("%1/jellyfin-desktop-%2.log")
+                    .arg(logDir, QUuid::createUuid().toString(QUuid::Id128));
 
   logFile = new QFile(tempLogPath);
-  logFile->open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate);
+  if (!logFile->open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate))
+  {
+    qCritical() << "Failed to create temporary log file:" << tempLogPath;
+  }
+  else
+  {
+    logFile->setPermissions(QFile::ReadOwner | QFile::WriteOwner);
+  }
 
   qInfo() << "Starting Jellyfin version:" << qPrintable(Version::GetVersionString()) << "build date:" << qPrintable(Version::GetBuildDate());
   qInfo() << qPrintable(QString("  Running on: %1 [%2] arch %3").arg(QSysInfo::prettyProductName()).arg(QSysInfo::kernelVersion()).arg(QSysInfo::currentCpuArchitecture()));
@@ -154,12 +174,26 @@ void Log::RotateLog()
   }
 
   // Rename unique log to main log
-  QFile::rename(tempLogPath, mainLog);
+  if (!tempLogPath.isEmpty() && QFile::exists(tempLogPath))
+  {
+    if (QFile::exists(mainLog))
+      QFile::remove(mainLog);
+    if (QFile::rename(tempLogPath, mainLog))
+      tempLogPath.clear();
+  }
 
   // Reopen as main log and continue writing
   delete logFile;
+  logFile = nullptr;
   logFile = new QFile(mainLog);
-  logFile->open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Append);
+  if (!logFile->open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Append))
+  {
+    qCritical() << "Failed to open main log file:" << mainLog;
+  }
+  else
+  {
+    logFile->setPermissions(QFile::ReadOwner | QFile::WriteOwner);
+  }
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////

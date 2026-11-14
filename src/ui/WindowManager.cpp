@@ -315,7 +315,9 @@ void WindowManager::raiseWindow()
   // Raise and request activation
   // Note: Wayland blocks requestActivate() for security (prevents focus stealing)
   // On Wayland, window will be raised but user must click to activate
-  m_window->show();
+  // show() resets QWindow visibility to the platform default, losing fullscreen
+  // or maximized state. setVisible() preserves that state when restoring it.
+  m_window->setVisible(true);
   m_window->raise();
   m_window->requestActivate();
 }

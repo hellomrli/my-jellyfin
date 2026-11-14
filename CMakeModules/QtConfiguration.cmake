@@ -90,6 +90,8 @@ message(STATUS "Qt version: ${Qt6Core_VERSION}")
 message(STATUS "Qt WebEngine version: ${Qt6WebEngineCore_VERSION}")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${QT6_CFLAGS}")
 
+include(CMakePushCheckState)
+cmake_push_check_state(RESET)
 set(CMAKE_REQUIRED_INCLUDES ${Qt6WebEngineCore_INCLUDE_DIRS};${Qt6WebEngineCore_PRIVATE_INCLUDE_DIRS})
 set(CMAKE_REQUIRED_LIBRARIES ${QT6_LIBRARIES})
 
@@ -104,6 +106,8 @@ CHECK_CXX_SOURCE_COMPILES(
     return 0;
   }
 " QT6_HAVE_OPTIMALORIENTATION)
+
+cmake_pop_check_state()
 
 if(QT6_HAVE_OPTIMALORIENTATION)
   message(STATUS "QSurfaceFormat::UseOptimalOrientation found")

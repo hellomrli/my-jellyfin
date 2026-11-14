@@ -1,24 +1,30 @@
 # Windows 本地构建说明
 
-本仓库是 jellyfin-desktop 的本地修改版，版本号见 [`VERSION`](VERSION)（当前 `2.0.4-Lain`）。
+本仓库是 jellyfin-desktop 的本地修改版，版本号见 [`VERSION`](VERSION)（当前 `2.0.5-Lain`）。
 
-正式版发布名称与 Git 标签为 `v2.0.4-Lain自用版`。中文用于 GitHub 发布名称和标签；
-程序内部版本号及安装包文件名保留 ASCII，Windows 数值版本信息为 `2.0.4.0`。
-本次从已测试的预发布版转为正式发布，不更换 Qt/MPV 依赖，也不将 WebEngine 的 RC 组件标记为稳定版。
+本轮正式版的名称与 Git 标签采用 `v2.0.5-Lain自用版`。中文用于 GitHub 发布名称和标签；
+程序内部版本号及安装包文件名保留 ASCII，Windows 数值版本信息为 `2.0.5.0`。
+本轮同步上游播放、全屏、音频配置和日志修复，Qt Core/MPV 固定版本沿用本分支配置，
+配套 WebEngine 使用同一下载渠道内 2026-11-11 更新的组件。已发布的 `2.0.4-Lain` 仍使用当时的 WebEngine RC 包。
 
-## 当前依赖与验证范围（2026-11-02）
+## 当前依赖与验证范围（2026-11-14）
 
-- 默认 Qt 升至 **6.12.0**，版本统一保存在 [`dev/qt-version.txt`](dev/qt-version.txt)，本地脚本与 CI 共用。
-- **注意：配套 Qt WebEngine 当前官方标记为 `6.140.0-rc`，不是全套稳定版组件。**
-  它依赖 Qt Core 6.12.0，使用独立的 `6120/61400` 下载目录；CMake 显示 WebEngine `6.140.0` 是正常的。
+- 默认 Qt 为 **6.12.0**，截至本次核对仍是最新公开正式版，版本统一保存在 [`dev/qt-version.txt`](dev/qt-version.txt)，本地脚本与 CI 共用。
+- 配套 Qt WebEngine 的官方标记已更新为 **`6.140.0`**，去掉 RC 后缀，包发布日期为 2026-11-11，
+  安装器构建版本为 `6.12.0-0-202611110526`。它依赖 Qt Core 6.12.0，使用独立的 `6120/61400` 下载目录；
+  CMake 显示 WebEngine `6.140.0` 是正常的。
 - [`dev/install-qt.py`](dev/install-qt.py) 修正新版 Windows 仓库路径，并选择上述配套 WebEngine，
-  避免普通 `aqt -m qtwebengine` 下载到旧的 7 月构建。底层仍由固定版本 aqt 完成下载、校验和解压。
+  避免普通 `aqt -m qtwebengine` 下载到旧的 7 月构建。每次安装都读取官方元数据里的构建版本，
+  底层仍由固定版本 aqt 完成下载、校验和解压。
 - libmpv 跟随上游更新至 `20261018-git-01e2533f31`，保留 AVX2 主版本与非 AVX2 回退 DLL。
 - 内置 Noto Sans CJK SC / Noto Serif CJK SC 常规与粗体字幕字体，使用固定上游提交及 SHA-256 校验，
   字体原文件和 SIL OFL 1.1 许可证均随包附带，不修改系统字体。来源见 [`dev/fonts.json`](dev/fonts.json)。
-- 已核对上游最新提交 [`6ba5b98`](https://github.com/jellyfin/jellyfin-desktop/commit/6ba5b9814f2d655b12b4e26b659817d7546c2cde)（2026-11-01），
-  吸收转码音轨修复与 SyncPlay 播放进度的秒/毫秒单位修复，保留本分支的音轨和字幕选择增强。
-- 已完成 Linux 上 Qt 6.12.0 全量编译、自动测试和本地播放冒烟测试；Windows 的完整 Qt 下载清单及两份 MPV 压缩包已核对。
+- 已核对上游提交 [`6482a5f`](https://github.com/jellyfin/jellyfin-desktop/commit/6482a5f36dbac74cec03caddde41adf60056ae78)（2026-11-14），
+  同步进度通知节流、毫秒时长缓存、Esc 退出视频全屏、任务栏进度、音频设备配置修复、调试信息更新和日志启动卡死修复。
+  另修复重新激活窗口时丢失全屏或最大化状态的问题。
+  上游本次合入的音量取整和透明背景修复已有本地实现，逐项说明见 [UPSTREAM.md](UPSTREAM.md)。
+- `2.0.4-Lain` 的验证记录包括 Linux 上 Qt 6.12.0 全量编译、自动测试和本地播放冒烟测试，以及 Windows Qt/MPV 下载清单核对。
+  本轮本地验证单独记录于 [UPSTREAM.md](UPSTREAM.md)，Windows 发布结果以对应 Actions 记录为准。
   Windows/MSVC 构建、单元测试、独立安装包播放及安装/卸载由本仓库 Actions 在 Windows 上验证，
   只有检查成功的产物才会发布；具体结果见对应版本的发布页和 Actions 日志。
   **显卡、硬解和音频直通真机测试不在自动测试覆盖范围内**，不能把 Linux 验证当成 Windows 验证。
@@ -58,7 +64,7 @@ dev\windows\bundle.bat
 校验或修复字幕字体，并在 MPV 版本变更时更新 DLL、头文件和 import lib。
 切换 Qt 版本时请使用干净的构建目录，避免混用旧 CMake 缓存。
 
-若优先使用无 RC 标记的配套组件，可以在同一终端中显式选择 6.11.3：
+若需使用旧版 Qt 排查兼容性问题，可以在同一终端中显式选择 6.11.3：
 
 ```bat
 set QT_VERSION=6.11.3
@@ -127,8 +133,8 @@ ninja -C build windows_all
 测试时将所选 Qt 的 `bin/` 和 MPV DLL 目录加入 PATH，再运行 `ctest --test-dir build --output-on-failure`。
 推荐流程中的 `test.bat` 会自动设置这些路径。打包产物在 `build/` 下：
 
-- `JellyfinDesktop-2.0.4-Lain-x64.exe` —— Inno Setup 安装包
-- `JellyfinDesktop-2.0.4-Lain-x64.zip` —— 便携版
+- `JellyfinDesktop-2.0.5-Lain-x64.exe` —— Inno Setup 安装包
+- `JellyfinDesktop-2.0.5-Lain-x64.zip` —— 便携版
 - `output/` —— 可直接运行的目录（`Jellyfin Desktop.exe` + Qt/libmpv 等 DLL）
 
 ## 5. 已知坑

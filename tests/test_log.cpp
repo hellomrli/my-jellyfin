@@ -1,4 +1,12 @@
 #include <QtTest/QtTest>
+#include <QProcess>
+#include <QScopeGuard>
+#include <QStandardPaths>
+#include <QTemporaryDir>
+#include <QTextStream>
+#include "core/ProfileManager.h"
+#include "shared/Names.h"
+#include "shared/Paths.h"
 #include "../src/utils/Log.h"
 
 class TestLog : public QObject
@@ -13,6 +21,9 @@ private slots:
   // CensorAuthTokens tests
   void testCensorAuthTokens_data();
   void testCensorAuthTokens();
+
+  void testLogLifecycle_data();
+  void testLogLifecycle();
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -141,5 +152,112 @@ void TestLog::testCensorAuthTokens()
   QCOMPARE(msg, expected);
 }
 
-QTEST_APPLESS_MAIN(TestLog)
+void TestLog::testLogLifecycle_data()
+{
+  QTest::addColumn<QString>("scenario");
+  QTest::newRow("normal") << QString("normal");
+  QTest::newRow("missing-directory") << QString("missing-directory");
+  QTest::newRow("rotation-after-cleanup") << QString("rotation-after-cleanup");
+  QTest::newRow("blocked-directory") << QString("blocked-directory");
+}
+
+void TestLog::testLogLifecycle()
+{
+  QFETCH(QString, scenario);
+  QTemporaryDir config;
+  QVERIFY(config.isValid());
+  QProcess worker;
+  worker.start(QCoreApplication::applicationFilePath(), {"--log-scenario", scenario, config.path()});
+  QVERIFY(worker.waitForStarted());
+  const bool finished = worker.waitForFinished(5000);
+  if (!finished)
+  {
+    worker.kill();
+    worker.waitForFinished(1000);
+  }
+  const auto errors = worker.readAllStandardError();
+  const QString logDir = QString::fromUtf8(worker.readAllStandardOutput()).trimmed();
+  QVERIFY(!logDir.isEmpty());
+  // macOS keeps profile logs outside the overridden config directory.
+  const auto cleanupLogs = qScopeGuard([logDir] {
+    if (QFileInfo(logDir).isDir())
+      QDir(logDir).removeRecursively();
+    else
+      QFile::remove(logDir);
+  });
+  QVERIFY2(finished, "Logging did not finish within five seconds; possible deadlock");
+  QVERIFY2(worker.exitStatus() == QProcess::NormalExit && worker.exitCode() == 0, errors.constData());
+
+  if (scenario == "blocked-directory")
+  {
+    QVERIFY(errors.contains("Failed to create temporary log file"));
+    QVERIFY(errors.contains("Failed to open main log file"));
+    return;
+  }
+
+  const QString logPath = logDir + "/" + Names::DataName() + ".log";
+  QFile current(logPath);
+  QFile previous(logPath + ".1");
+  QVERIFY(current.open(QIODevice::ReadOnly));
+  QVERIFY(previous.open(QIODevice::ReadOnly));
+  const auto currentText = current.readAll();
+  const auto previousText = previous.readAll();
+  QVERIFY(currentText.contains("LOG_SECOND_ROTATION"));
+  QVERIFY(!currentText.contains("LOG_FIRST_ROTATION"));
+  QVERIFY(previousText.contains("LOG_FIRST_ROTATION"));
+  if (scenario != "rotation-after-cleanup")
+  {
+    QVERIFY(previousText.contains("LOG_INITIAL api_key=" + QByteArray(32, 'x')));
+    QVERIFY(!previousText.contains("abcdef0123456789abcdef0123456789"));
+  }
+  QVERIFY(QDir(logDir).entryList({"jellyfin-desktop-*.log"}, QDir::Files).isEmpty());
+}
+
+// Run logger scenarios in a child process so a mutex deadlock has a bounded
+// failure, and replacing Qt's message handler cannot hide Qt Test assertions.
+static int runLogScenario(const QString& scenario, const QString& configDir)
+{
+  QStandardPaths::setTestModeEnabled(true);
+  Paths::setConfigDir(configDir);
+  Paths::setCacheDir(configDir);
+  ProfileManager::Get().setActiveProfile(ProfileManager::createProfile("Log tests"));
+  const QString logDir = ProfileManager::activeProfile().logDir();
+  QTextStream output(stdout);
+  output << logDir << '\n';
+  output.flush();
+
+  if (scenario == "missing-directory" || scenario == "blocked-directory")
+  {
+    if (!QDir(logDir).removeRecursively())
+      return 1;
+    if (scenario == "blocked-directory")
+    {
+      QFile blocker(logDir);
+      if (!blocker.open(QIODevice::WriteOnly))
+        return 1;
+    }
+  }
+
+  Log::Init();
+  qInfo("LOG_INITIAL api_key=abcdef0123456789abcdef0123456789");
+  if (scenario == "rotation-after-cleanup")
+    Log::Cleanup();
+  Log::RotateLog();
+  qInfo("LOG_FIRST_ROTATION");
+  Log::RotateLog();
+  qInfo("LOG_SECOND_ROTATION");
+  Log::Cleanup();
+  return 0;
+}
+
+int main(int argc, char** argv)
+{
+  QCoreApplication app(argc, argv);
+  const auto arguments = app.arguments();
+  if (arguments.size() == 4 && arguments[1] == "--log-scenario")
+    return runLogScenario(arguments[2], arguments[3]);
+  TestLog test;
+  return QTest::qExec(&test, argc, argv);
+}
+
 #include "test_log.moc"

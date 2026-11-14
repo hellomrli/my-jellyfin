@@ -26,16 +26,17 @@ dev\windows\test.bat
 - Visual Studio 2022 Build Tools (v143 toolset)
 - CMake 3.25+, Ninja, 7-Zip, Inno Setup
 - Python 3.13, isolated aqtinstall 3.3.0, Qt 6.12.0
-- Matching Qt WebEngine **6.140.0-rc** from the versioned repository
+- Matching Qt WebEngine **6.140.0** from the versioned repository (package updated 2026-11-11)
 - libmpv (AVX2 + fallback), VC++ redistributable
 - Noto Sans CJK SC / Noto Serif CJK SC subtitle fonts (Regular + Bold, SIL OFL 1.1)
 - MinGW, WiX (for packaging)
 
-The RC label is significant: the default is the newest Qt kit, not an entirely
-stable component set. See [Qt toolchain policy](../README.md#qt-toolchain) and the
+As checked on 2026-11-14, the default Qt 6.12.0 kit is the latest public stable release,
+and the matching WebEngine package no longer carries an RC label. See
+[Qt toolchain policy](../README.md#qt-toolchain) and the
 [Chinese build guide](../../BUILD-Windows.md) for validation limits and manual setup.
 
-To select the stable-pairing fallback instead, use the same terminal for all scripts:
+To select an older kit for compatibility checks, use the same terminal for all scripts:
 
 ```cmd
 set QT_VERSION=6.11.3
@@ -46,7 +47,8 @@ dev\windows\test.bat
 
 Use a clean build directory when switching Qt versions. `set QT_VERSION=` restores
 the shared default. Version 6.9.3 is another explicit fallback. Setup can be rerun
-to repair a partial Qt/WebEngine installation and update pinned MPV dependencies.
+to update WebEngine from the current metadata, repair a partial Qt installation,
+and update pinned MPV dependencies.
 It also verifies or repairs the app-local subtitle fonts; no fonts are installed
 into Windows. See [font packaging](../README.md#bundled-windows-subtitle-fonts)
 for the source manifest, licensing, and subtitle-versus-web-UI behavior.
