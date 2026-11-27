@@ -1,16 +1,26 @@
 * {
     box-sizing: border-box;
 }
+[hidden] {
+    display: none !important;
+}
 body {
+    margin: 0;
+    min-height: 100vh;
     background-color: #101010;
     color: #ddd;
     color: rgba(255, 255, 255, 0.8);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     font-size: 1em;
-    padding: 1em;
+    padding: 2em 1em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 .logo {
+    width: 100%;
     max-width: 500px;
+    height: auto;
     margin-bottom: 2em;
     margin-left: auto;
     margin-right: auto;
@@ -55,58 +65,46 @@ button {
 button:hover:not(:disabled) {
     background: #0cb0e8;
 }
+button:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 3px;
+}
 button:disabled {
     background-color: #292929;
     cursor: default;
     opacity: 0.6;
 }
 #container {
-    position: absolute;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    right: 0;
+    width: 100%;
+    max-width: 500px;
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
 }
-.logo {
-    max-width: 500px;
-    margin-bottom: 2em;
-    margin-left: auto;
-    margin-right: auto;
-    display: block;
-}
 #title {
     margin-top: 1em;
-    margin-bottom: 0;
+    margin-bottom: 0.5em;
     font-size: 1.5em;
     font-weight: 400;
     color: #ddd;
     color: rgba(255, 255, 255, 0.8);
     min-height: 1.5em;
-    height: 1.5em;
     max-width: 450px;
     width: 100%;
     text-align: left;
-    visibility: hidden;
 }
 #connect-form {
     display: flex;
     flex-direction: column;
     align-items: center;
     width: 100%;
-    position: relative;
+    max-width: 450px;
 }
 #address {
     margin-bottom: 1em;
     max-width: 450px;
     height: 2.5em;
-    visibility: hidden;
-}
-#address.connecting {
-    visibility: hidden;
 }
 #spinner {
     border: 6px solid #292929;
@@ -116,23 +114,37 @@ button:disabled {
     height: 80px;
     animation: spin 1s linear infinite;
     display: none;
-    position: absolute;
-    top: calc(1em + 1.5em + 1.25em);
-    left: 50%;
-    margin-left: -40px;
+    margin: 1.5em 0 0;
 }
-#connect-button {
+#connect-button, #cancel-button {
     max-width: 450px;
     min-height: 2.5em;
-    visibility: hidden;
+}
+#connection-status, #connection-error {
+    width: 100%;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+#connection-status {
+    text-align: center;
+    margin: 1.5em 0;
+}
+#connection-error {
+    color: #ff9696;
+    margin: 0 0 1em;
 }
 @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
 }
-#connect-button.cancel {
+#cancel-button {
     background: #cb272a;
 }
-#connect-button.cancel:hover:not(:disabled) {
+#cancel-button:hover:not(:disabled) {
     background: #d93134;
+}
+@media (prefers-reduced-motion: reduce) {
+    #spinner {
+        animation: none;
+    }
 }

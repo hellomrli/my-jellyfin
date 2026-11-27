@@ -244,6 +244,8 @@ private:
   void updatePlaybackState();
   void handleMpvEvent(mpv_event *event);
   void resetPlaybackTime();
+  void refreshAc3Filter();
+  void updateAc3Filter(const QString& codec, int channels);
   // Potentially switch the display refresh rate, and return true if the refresh rate
   // was actually changed.
   bool switchDisplayFrameRate();
@@ -277,6 +279,7 @@ private:
   QSet<QString> m_audioDevices;
   bool m_streamSwitchImminent;
   bool m_doAc3Transcoding;
+  bool m_ac3FilterActive = false;
   QStringList m_passthroughCodecs;
   QVariantMap m_serverMediaInfo;
   QVariant m_currentSubtitleStream;

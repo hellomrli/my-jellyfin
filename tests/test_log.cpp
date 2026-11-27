@@ -72,6 +72,9 @@ void TestLog::testCensorAuthTokens_data()
   QTest::addColumn<QString>("expected");
 
   const QString masked32 = QString(32, 'x');
+  QTest::newRow("remote URL credentials query and fragment")
+    << "two URLs: HTTPS://user:pass@[::1]:8096/base%2Fpath?q=private#part http://host/web/#secret"
+    << "two URLs: HTTPS://[::1]:8096/base%2Fpath http://host/web/";
 
   // Base case: No tokens in string
   QTest::newRow("no token")

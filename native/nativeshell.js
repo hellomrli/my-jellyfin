@@ -225,34 +225,21 @@ async function createApi() {
     return channel.objects;
 }
 
-const sectionsFromStorage = window.sessionStorage.getItem('sections');
-if (sectionsFromStorage) {
-    jmpInfo.sections = JSON.parse(sectionsFromStorage);
-}
-
-let rawSettings = {};
-Object.assign(rawSettings, jmpInfo.settings);
-const settingsFromStorage = window.sessionStorage.getItem('settings');
-if (settingsFromStorage) {
-    rawSettings = JSON.parse(settingsFromStorage);
-    Object.assign(jmpInfo.settings, rawSettings);
-}
-
-const settingsDescriptionsFromStorage = window.sessionStorage.getItem('settingsDescriptions');
-if (settingsDescriptionsFromStorage) {
-    jmpInfo.settingsDescriptions = JSON.parse(settingsDescriptionsFromStorage);
-}
-
 jmpInfo.settingsDescriptionsUpdate = [];
 jmpInfo.settingsUpdate = [];
-window.apiPromise = createApi();
-window.initCompleted = new Promise(async (resolve) => {
-    window.api = await window.apiPromise;
+window.apiPromise = createApi().then(async api => {
+    const snapshot = await new Promise(resolve => api.settings.webClientSettings(resolve));
+    const rawSettings = snapshot.settings;
+    jmpInfo.sections = snapshot.sections;
+    jmpInfo.settingsDescriptions = snapshot.settingsDescriptions;
+    jmpInfo.settings = {};
+    try {
+        for (const key of ['settings', 'settingsDescriptions', 'sections']) window.sessionStorage.removeItem(key);
+    } catch {}
     const settingUpdate = (section, key) => (
         (data) => new Promise(resolve => {
             rawSettings[section][key] = data;
-            window.sessionStorage.setItem("settings", JSON.stringify(rawSettings));
-            window.api.settings.setValue(section, key, data, resolve);
+            api.settings.setValue(section, key, data, resolve);
         })
     );
     const setSetting = (section, key) => {
@@ -264,12 +251,12 @@ window.initCompleted = new Promise(async (resolve) => {
     for (const settingGroup of Object.keys(rawSettings)) {
         jmpInfo.settings[settingGroup] = {};
         for (const setting of Object.keys(rawSettings[settingGroup])) {
-            setSetting(settingGroup, setting, jmpInfo.settings[settingGroup][setting]);
+            setSetting(settingGroup, setting);
         }
     }
-    window.api.settings.sectionValueUpdate.connect(
+    api.settings.sectionValueUpdate.connect(
         (section, data) => {
-            Object.assign(rawSettings[section], data);
+            Object.assign(rawSettings[section] ??= {}, data);
             for (const callback of jmpInfo.settingsUpdate) {
                 try {
                     callback(section, data);
@@ -278,11 +265,9 @@ window.initCompleted = new Promise(async (resolve) => {
                 }
             }
 
-            // Settings will be outdated if page reloads, so save them to session storage
-            window.sessionStorage.setItem("settings", JSON.stringify(rawSettings));
         }
     );
-    window.api.settings.groupUpdate.connect(
+    api.settings.groupUpdate.connect(
         (section, data) => {
             jmpInfo.settingsDescriptions[section] = data.settings;
             for (const callback of jmpInfo.settingsDescriptionsUpdate) {
@@ -293,8 +278,6 @@ window.initCompleted = new Promise(async (resolve) => {
                 }
             }
 
-            // Settings will be outdated if page reloads, so save them to session storage
-            window.sessionStorage.setItem("settingsDescriptions", JSON.stringify(jmpInfo.settingsDescriptions));
         }
     );
 
@@ -309,8 +292,10 @@ window.initCompleted = new Promise(async (resolve) => {
     });
     observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
 
-    resolve();
+    window.api = api;
+    return api;
 });
+window.initCompleted = window.apiPromise;
 
 window.NativeShell.AppHost = {
     init() {

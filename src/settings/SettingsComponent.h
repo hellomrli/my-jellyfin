@@ -61,6 +61,7 @@ public:
   Q_INVOKABLE void resetToDefaultAll();
   Q_INVOKABLE void resetToDefault(const QString& sectionID);
   Q_INVOKABLE QVariantList settingDescriptions();
+  Q_INVOKABLE QVariantMap webClientSettings();
   Q_INVOKABLE QString getWebClientUrl(bool desktop);
   Q_INVOKABLE QString getExtensionPath();
   Q_INVOKABLE QString getClientName();

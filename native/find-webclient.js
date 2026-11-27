@@ -1,109 +1,107 @@
-async function tryConnect(server) {
-    try {
-        if (!server.startsWith("http")) {
-            server = "http://" + server;
-        }
-
-        console.log("Checking connectivity to:", server);
-
-        const resolvedUrl = await window.jmpCheckServerConnectivity(server);
-        console.log("Server connectivity check passed");
-        console.log("Resolved URL:", resolvedUrl);
-
-        // Save original URL but navigate to fully-resolved redirect
-        window.jmpInfo.settings.main.userWebClient = server;
-
-        // Navigation will clean up handlers, but do it explicitly
-        window.location = resolvedUrl;
-
-        return true;
-    } catch (e) {
-        console.error("Server connectivity check failed:", e);
-        return false;
-    }
-}
-
-let isConnecting = false;
+let activeConnection = null;
+let hasInteracted = false;
+let connectionError = '';
+let invalidAddress = false;
+const connectionStrings = window.jmpConnectionStrings;
 
 const updateButtonState = () => {
     const address = document.getElementById('address');
     const button = document.getElementById('connect-button');
-    const hasValue = address.value.trim().length > 0;
-
-    if (!isConnecting) {
-        button.disabled = !hasValue;
-    }
+    button.disabled = !!activeConnection || !address.value.trim();
 };
 
-const cancelOnEscape = (e) => {
-    if (isConnecting && e.key === 'Escape') {
-        cancelConnection();
-    }
+const updateErrorUi = () => {
+    const error = document.getElementById('connection-error');
+    error.textContent = connectionError;
+    error.hidden = !connectionError;
+    document.getElementById('address').setAttribute('aria-invalid', invalidAddress ? 'true' : 'false');
+};
+
+const updateConnectionUi = () => {
+    const connecting = !!activeConnection;
+    const address = document.getElementById('address');
+    const title = document.getElementById('title');
+    const spinner = document.getElementById('spinner');
+    const button = document.getElementById('connect-button');
+    const cancel = document.getElementById('cancel-button');
+    const status = document.getElementById('connection-status');
+
+    title.textContent = title.getAttribute('data-original-text');
+    title.style.visibility = 'visible';
+    address.style.visibility = 'visible';
+    address.hidden = connecting;
+    address.disabled = connecting;
+    spinner.style.display = connecting ? 'block' : 'none';
+    button.style.visibility = 'visible';
+    button.hidden = connecting;
+    cancel.hidden = !connecting;
+    status.textContent = connecting ? connectionStrings.connecting : '';
+    status.hidden = !connecting;
+    document.getElementById('connect-form').setAttribute('aria-busy', connecting ? 'true' : 'false');
+    updateErrorUi();
+    updateButtonState();
+    if (connecting) cancel.focus();
+    else address.focus();
 };
 
 const startConnecting = async () => {
     const address = document.getElementById('address');
-    const title = document.getElementById('title');
-    const spinner = document.getElementById('spinner');
-    const button = document.getElementById('connect-button');
-    const server = address.value;
+    const input = address.value.trim();
+    if (activeConnection || !input) return;
 
-    isConnecting = true;
-    title.textContent = '';
-    title.style.visibility = 'hidden';
-    address.classList.add('connecting');
-    address.style.visibility = 'hidden';
-    address.disabled = true;
-    spinner.style.display = 'block';
-    button.style.visibility = 'hidden';
-    document.addEventListener('keydown', cancelOnEscape);
+    hasInteracted = true;
+    let server;
+    try {
+        const parsed = new URL(/^[a-z][a-z\d+.-]*:\/\//i.test(input) ? input : `http://${input}`);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+            throw new Error('Invalid server address');
+        }
+        if (parsed.username || parsed.password) {
+            connectionError = connectionStrings.credentials;
+            invalidAddress = true;
+            updateConnectionUi();
+            return;
+        }
+        parsed.search = '';
+        parsed.hash = '';
+        server = parsed.href;
+    } catch {
+        connectionError = connectionStrings.invalidAddress;
+        invalidAddress = true;
+        updateConnectionUi();
+        return;
+    }
 
-    // C++ handles retries, just wait for result
-    const connected = await tryConnect(server);
+    const connection = {};
+    activeConnection = connection;
+    connectionError = '';
+    invalidAddress = false;
+    updateConnectionUi();
 
-    if (!connected) {
-        isConnecting = false;
-        title.textContent = document.getElementById('title').getAttribute('data-original-text');
-        title.style.visibility = 'visible';
-        address.classList.remove('connecting');
-        address.style.visibility = 'visible';
-        address.disabled = false;
-        spinner.style.display = 'none';
-        button.style.visibility = 'visible';
-        document.removeEventListener('keydown', cancelOnEscape);
-        updateButtonState();
+    try {
+        // C++ handles retries; only the current attempt may save settings or navigate.
+        const resolvedUrl = await window.jmpCheckServerConnectivity(server);
+        if (activeConnection !== connection) return;
+        window.jmpInfo.settings.main.userWebClient = server;
+        window.location = resolvedUrl;
+    } catch (error) {
+        if (activeConnection !== connection) return;
+        activeConnection = null;
+        connectionError = Object.hasOwn(connectionStrings, error?.code) ? connectionStrings[error.code] : connectionStrings.failed;
+        updateConnectionUi();
     }
 };
 
 const cancelConnection = () => {
-    if (!isConnecting) return;
+    if (!activeConnection) return;
 
-    console.log("Cancelling connection");
-    isConnecting = false;
-
-    // Cancel C++ connectivity check and abort JS promise
-    if (window.api && window.api.system) {
-        window.api.system.cancelServerConnectivity();
-    }
-    if (window.jmpCheckServerConnectivity.abort) {
-        window.jmpCheckServerConnectivity.abort();
-    }
-
-    const address = document.getElementById('address');
-    const title = document.getElementById('title');
-    const spinner = document.getElementById('spinner');
-    const button = document.getElementById('connect-button');
-
-    title.textContent = document.getElementById('title').getAttribute('data-original-text');
-    title.style.visibility = 'visible';
-    address.classList.remove('connecting');
-    address.style.visibility = 'visible';
-    address.disabled = false;
-    spinner.style.display = 'none';
-    button.style.visibility = 'visible';
-    document.removeEventListener('keydown', cancelOnEscape);
-    updateButtonState();
+    console.log('Cancelling connection');
+    activeConnection = null;
+    window.jmpCheckServerConnectivity.abort();
+    updateConnectionUi();
 };
+
+document.getElementById('cancel-button').addEventListener('click', cancelConnection);
 
 // Button click handler
 document.getElementById('connect-button').addEventListener('click', (e) => {
@@ -118,81 +116,55 @@ document.getElementById('connect-button').addEventListener('click', (e) => {
 // Form submit handler
 document.getElementById('connect-form').addEventListener('submit', (e) => {
     e.preventDefault();
-    if (!isConnecting) {
-        startConnecting();
-    }
+    startConnecting();
 });
 
 // Input change handler
-document.getElementById('address').addEventListener('input', updateButtonState);
+document.getElementById('address').addEventListener('input', () => {
+    hasInteracted = true;
+    connectionError = '';
+    invalidAddress = false;
+    updateErrorUi();
+    updateButtonState();
+});
 
-
-// Enter key handler
 document.addEventListener('keydown', (e) => {
     const address = document.getElementById('address');
-    if (e.key === 'Enter' && !isConnecting && !address.disabled && address.value.trim()) {
+    if (e.key === 'Escape' && activeConnection) {
+        e.preventDefault();
+        cancelConnection();
+    } else if (e.key === 'Enter' && !activeConnection && !address.disabled && address.value.trim()) {
         e.preventDefault();
         startConnecting();
     }
 });
 
+// Keep the form usable even if the native bridge takes time to start.
+updateConnectionUi();
+
 // Auto-connect on load
 (async () => {
-    console.log('Auto-connect: starting');
+    try {
+        await window.initCompleted;
+    } catch {
+        if (!hasInteracted) {
+            connectionError = connectionStrings.unavailable;
+            updateConnectionUi();
+        }
+        return;
+    }
 
-    await window.apiPromise;
+    // Startup must not overwrite manual input or revive an attempt cancelled with Esc.
+    if (hasInteracted) {
+        if (!activeConnection) updateConnectionUi();
+        return;
+    }
 
     const savedServer = window.jmpInfo.settings.main.userWebClient;
-    console.log('Auto-connect: savedServer =', savedServer);
-
-    if (savedServer) {
-        console.log('Auto-connect: checking saved server', savedServer);
-
-        const address = document.getElementById('address');
-        const title = document.getElementById('title');
-        const spinner = document.getElementById('spinner');
-        const button = document.getElementById('connect-button');
-
-        // Set address value for potential display later
-        address.value = savedServer;
-
-        // Show connecting UI
-        isConnecting = true;
-        title.textContent = '';
-        title.style.visibility = 'hidden';
-        address.classList.add('connecting');
-        address.style.visibility = 'hidden';
-        address.disabled = true;
-        spinner.style.display = 'block';
-        button.style.visibility = 'hidden';
-        document.addEventListener('keydown', cancelOnEscape);
-
-        // C++ handles retries, just wait for result
-        const connected = await tryConnect(savedServer);
-
-        if (!connected) {
-            // User cancelled or error - show UI
-            isConnecting = false;
-            title.textContent = document.getElementById('title').getAttribute('data-original-text');
-            title.style.visibility = 'visible';
-            address.classList.remove('connecting');
-            address.style.visibility = 'visible';
-            address.disabled = false;
-            spinner.style.display = 'none';
-            button.style.visibility = 'visible';
-            document.removeEventListener('keydown', cancelOnEscape);
-            address.focus();
-            updateButtonState();
-        }
+    if (typeof savedServer === 'string' && savedServer.trim()) {
+        document.getElementById('address').value = savedServer;
+        startConnecting();
     } else {
-        const title = document.getElementById('title');
-        const address = document.getElementById('address');
-        const button = document.getElementById('connect-button');
-
-        title.style.visibility = 'visible';
-        address.style.visibility = 'visible';
-        button.style.visibility = 'visible';
-        address.focus();
-        updateButtonState();
+        updateConnectionUi();
     }
 })();

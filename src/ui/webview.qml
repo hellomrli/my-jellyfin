@@ -293,7 +293,7 @@ Window
       // Handle CSP workaround from C++
       components.system.pageContentReady.connect(function(html, finalUrl, hadCSP) {
         if (hadCSP) {
-          console.log("CSP workaround: navigating to", finalUrl);
+          console.log("CSP workaround: navigating to", components.system.urlForLog(finalUrl));
           web.url = finalUrl;
         }
       })
@@ -329,16 +329,16 @@ Window
       //
       if (loadingInfo.status == WebEngineView.LoadStartedStatus)
       {
-        console.log("WebEngineLoadRequest starting: " + loadingInfo.url);
+        console.log("WebEngineLoadRequest starting: " + components.system.urlForLog(loadingInfo.url));
       }
       else if (loadingInfo.status == WebEngineView.LoadSucceededStatus)
       {
-        console.log("WebEngineLoadRequest success: " + loadingInfo.url);
+        console.log("WebEngineLoadRequest success: " + components.system.urlForLog(loadingInfo.url));
         Qt.callLater(reapplyTransparentBackground);
       }
       else if (loadingInfo.status == WebEngineView.LoadFailedStatus)
       {
-        console.log("WebEngineLoadRequest failure: " + loadingInfo.url + " error code: " + loadingInfo.errorCode);
+        console.log("WebEngineLoadRequest failure: " + components.system.urlForLog(loadingInfo.url) + " error code: " + loadingInfo.errorCode);
         errorLabel.visible = true
         errorLabel.text = "Error loading client, this is bad and should not happen<br>" +
                           "You can try to <a href='reload'>reload</a> or head to our <a href='http://jellyfin.org'>support page</a><br><br>Actual Error: <pre>" +
@@ -351,7 +351,7 @@ Window
     {
       if (request.userInitiated)
       {
-        console.log("Opening external URL: " + web.currentHoveredUrl)
+        console.log("Opening external URL: " + components.system.urlForLog(web.currentHoveredUrl))
         components.system.openExternalUrl(web.currentHoveredUrl)
       }
     }
@@ -365,12 +365,12 @@ Window
 
     onJavaScriptConsoleMessage: function(level, message, lineNumber, sourceID)
     {
-      components.system.jsLog(level, sourceID + ":" + lineNumber + " " + message);
+      components.system.jsLog(level, components.system.urlForLog(sourceID) + ":" + lineNumber + " " + message);
     }
 
     onCertificateError: function(error)
     {
-      console.log(error.url + " :" + error.description + error.error)
+      console.log(components.system.urlForLog(error.url) + " :" + error.error)
       if (components.settings.ignoreSSLErrors()) {
         error.acceptCertificate()
       }

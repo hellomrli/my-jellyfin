@@ -16,6 +16,7 @@
 // Network timeouts (milliseconds)
 constexpr int NETWORK_REQUEST_TIMEOUT_MS = 30000;
 constexpr int CONNECTIVITY_RETRY_INTERVAL_MS = 5000;
+constexpr int CONNECTIVITY_BUDGET_MS = 60000;
 
 class SystemComponent : public ComponentBase
 {
@@ -40,11 +41,12 @@ public:
 
   Q_INVOKABLE void jsLog(int level, QString text);
 
-  Q_INVOKABLE void checkServerConnectivity(QString url);
+  Q_INVOKABLE void checkServerConnectivity(QString url, QString requestId = QString());
   Q_INVOKABLE void cancelServerConnectivity();
-  Q_SIGNAL void serverConnectivityResult(QString url, bool success, QString resolvedUrl);
+  Q_SIGNAL void serverConnectivityResult(QString url, bool success, QString result, QString requestId);
 
   static QString extractBaseUrl(const QString& url);
+  Q_INVOKABLE static QString urlForLog(const QUrl& url);
   void resolveUrl(const QString& url, std::function<void(const QString&)> callback);
 
   Q_INVOKABLE QString getUserAgent();
@@ -119,6 +121,8 @@ signals:
   void scaleChanged(qreal scale);
 
 private:
+  friend class TestSystemComponent;
+
   explicit SystemComponent(QObject* parent = nullptr);
   static QMap<QString, QString> networkInterfaces();
 
@@ -128,6 +132,7 @@ private:
   bool platformIsFreeBSD() const { return m_platformType == platformTypeFreeBSD; }
 
   void setReplyTimeout(QNetworkReply* reply, int ms);
+  void runConnectivityAttempt();
 
   QNetworkAccessManager* m_networkManager;
   PlatformType m_platformType;
@@ -139,7 +144,10 @@ private:
   QNetworkReply* m_connectivityCheckReply;
   QNetworkReply* m_resolveUrlReply;
   QTimer* m_connectivityRetryTimer;
+  QTimer m_connectivityDeadline;
+  QString m_connectivityFailure;
   QString m_pendingConnectivityUrl;
+  QString m_pendingConnectivityRequestId;
 
 };
 

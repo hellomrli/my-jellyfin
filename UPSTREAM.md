@@ -1,5 +1,21 @@
 # 上游同步记录
 
+## 2026-11-27：2.0.6-Lain
+
+核对范围：[6482a5f…7093013](https://github.com/jellyfin/jellyfin-desktop/compare/6482a5f...7093013)，终点为上游 `v2.1.0-pre2`。
+
+| 上游 PR | 本分支处理 |
+| --- | --- |
+| [#1297](https://github.com/jellyfin/jellyfin-desktop/pull/1297) | 为同一请求的 HEAD、GET 和重试间隔共用 60 秒总时限；保留请求 ID、取消、IPv6 和编码路径。用本地化原因代替包含 URL 的网络错误文本。 |
+| [#1348](https://github.com/jellyfin/jellyfin-desktop/pull/1348) | 更新 Windows 的两个 libmpv 构建，避免长视频在多次成功重连后误报 EOF。 |
+| [#1316](https://github.com/jellyfin/jellyfin-desktop/pull/1316) | 随音轨编解码器和声道数切换 AC3 滤镜，不重编码可直通音轨或双声道。 |
+| [#1332](https://github.com/jellyfin/jellyfin-desktop/pull/1332)、[#1333](https://github.com/jellyfin/jellyfin-desktop/pull/1333)、[#1314](https://github.com/jellyfin/jellyfin-desktop/pull/1314) | 初始化时从原生端读取设置与设备列表；只修正旧式 Tool 弹窗；预告片元数据不可用不影响事件绑定。 |
+| [#1273](https://github.com/jellyfin/jellyfin-desktop/pull/1273)、[#1322](https://github.com/jellyfin/jellyfin-desktop/pull/1322) | 已有等待事件去重及 Chromium 参数保留。继续关闭指向上游的更新检查，不随上游修改版本号或引入 Linux 元数据、编译告警清理。 |
+
+另参考当时未合并的 [#1323](https://github.com/jellyfin/jellyfin-desktop/pull/1323) 和 [#1358](https://github.com/jellyfin/jellyfin-desktop/pull/1358)：恢复过的窗口尺寸不再被删；视频每次进入 `waiting` 后仅发送一次配对的 `canplay`。Windows 安装包及便携包额外检查 `ControlsDelegates` 的插件和关键 QML 文件（[#1321](https://github.com/jellyfin/jellyfin-desktop/pull/1321)）。
+
+Windows 基线/主 DLL 的打包播放及安装卸载由该版本的 Actions 验收；本地文件冒烟不等同于在真实服务器上断网重连、硬解或功放直通测试。正式产物以[发布页](https://github.com/hellomrli/my-jellyfin/releases)为准。
+
 ## 2026-11-14：2.0.5-Lain
 
 上游仓库：[jellyfin/jellyfin-desktop](https://github.com/jellyfin/jellyfin-desktop)。
@@ -37,8 +53,7 @@
 
 Qt Core/MPV 固定版本、内置 Noto 字体、Windows 打包方式和自动构建平台范围沿用本分支配置。
 另核对了同一下载渠道内最新的 WebEngine 包，并修正安装器和文档中过时的 RC 描述。
-本次对应 `2.0.5-Lain`，Windows 正式版发布名称与 Git 标签采用 `v2.0.5-Lain自用版`。
-实际发布及 Windows CI 验证结果见 [本仓库 Releases](https://github.com/hellomrli/my-jellyfin/releases)。
+本次对应 `2.0.5-Lain`；[Windows CI 构建成功](https://github.com/hellomrli/my-jellyfin/actions/runs/43555782883)，未创建独立发布标签或 Release。
 
 ## 本地验证（2026-11-14）
 
@@ -67,8 +82,8 @@ MPV 固定版本见 `dev/mpv-version.txt`；已发布的 `2.0.4-Lain` 使用发�
 
 ```sh
 git fetch --no-tags upstream master
-git log --no-merges --oneline 6482a5f36dbac74cec03caddde41adf60056ae78..upstream/master
-git diff 6482a5f36dbac74cec03caddde41adf60056ae78 upstream/master
+git log --first-parent --oneline 70930139f7ef0c59b6ac98e8d0be436953c79083..upstream/master
+git diff 70930139f7ef0c59b6ac98e8d0be436953c79083 upstream/master
 ```
 
 新克隆如未配置上游，先运行

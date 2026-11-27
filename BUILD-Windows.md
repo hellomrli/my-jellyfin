@@ -1,28 +1,25 @@
 # Windows 本地构建说明
 
-本仓库是 jellyfin-desktop 的本地修改版，版本号见 [`VERSION`](VERSION)（当前 `2.0.5-Lain`）。
+本仓库是 jellyfin-desktop 的修改版，版本号见 [`VERSION`](VERSION)（当前 `2.0.6-Lain`）。
 
-本轮正式版的名称与 Git 标签采用 `v2.0.5-Lain自用版`。中文用于 GitHub 发布名称和标签；
-程序内部版本号及安装包文件名保留 ASCII，Windows 数值版本信息为 `2.0.5.0`。
-本轮同步上游播放、全屏、音频配置和日志修复，Qt Core/MPV 固定版本沿用本分支配置，
+本轮正式版的名称与 Git 标签采用 `v2.0.6-Lain自用版`。中文用于 GitHub 发布名称和标签；
+程序内部版本号及安装包文件名保留 ASCII，Windows 数值版本信息为 `2.0.6.0`。
+本轮修复连接超时、窗口尺寸和音频直通，保留本分支 Qt Core 配置，
 配套 WebEngine 使用同一下载渠道内 2026-11-11 更新的组件。已发布的 `2.0.4-Lain` 仍使用当时的 WebEngine RC 包。
 
-## 当前依赖与验证范围（2026-11-14）
+## 当前依赖与验证范围（2026-11-27）
 
-- 默认 Qt 为 **6.12.0**，截至本次核对仍是最新公开正式版，版本统一保存在 [`dev/qt-version.txt`](dev/qt-version.txt)，本地脚本与 CI 共用。
+- 默认 Qt 为 **6.12.0**，版本统一保存在 [`dev/qt-version.txt`](dev/qt-version.txt)，本地脚本与 CI 共用。
 - 配套 Qt WebEngine 的官方标记已更新为 **`6.140.0`**，去掉 RC 后缀，包发布日期为 2026-11-11，
   安装器构建版本为 `6.12.0-0-202611110526`。它依赖 Qt Core 6.12.0，使用独立的 `6120/61400` 下载目录；
   CMake 显示 WebEngine `6.140.0` 是正常的。
 - [`dev/install-qt.py`](dev/install-qt.py) 修正新版 Windows 仓库路径，并选择上述配套 WebEngine，
   避免普通 `aqt -m qtwebengine` 下载到旧的 7 月构建。每次安装都读取官方元数据里的构建版本，
   底层仍由固定版本 aqt 完成下载、校验和解压。
-- libmpv 跟随上游更新至 `20261018-git-01e2533f31`，保留 AVX2 主版本与非 AVX2 回退 DLL。
+- libmpv 跟随上游更新至 `20261108-git-55d3feb45c`，保留 x86_64-v3 主版本与 x86_64 回退 DLL。
 - 内置 Noto Sans CJK SC / Noto Serif CJK SC 常规与粗体字幕字体，使用固定上游提交及 SHA-256 校验，
   字体原文件和 SIL OFL 1.1 许可证均随包附带，不修改系统字体。来源见 [`dev/fonts.json`](dev/fonts.json)。
-- 已核对上游提交 [`6482a5f`](https://github.com/jellyfin/jellyfin-desktop/commit/6482a5f36dbac74cec03caddde41adf60056ae78)（2026-11-14），
-  同步进度通知节流、毫秒时长缓存、Esc 退出视频全屏、任务栏进度、音频设备配置修复、调试信息更新和日志启动卡死修复。
-  另修复重新激活窗口时丢失全屏或最大化状态的问题。
-  上游本次合入的音量取整和透明背景修复已有本地实现，逐项说明见 [UPSTREAM.md](UPSTREAM.md)。
+- 已核对上游 `v2.1.0-pre2`，保留本地版本、字幕字体、音轨映射、Qt 选择和 Windows 发布策略。取舍见 [UPSTREAM.md](UPSTREAM.md)。
 - `2.0.4-Lain` 的验证记录包括 Linux 上 Qt 6.12.0 全量编译、自动测试和本地播放冒烟测试，以及 Windows Qt/MPV 下载清单核对。
   本轮本地验证单独记录于 [UPSTREAM.md](UPSTREAM.md)，Windows 发布结果以对应 Actions 记录为准。
   Windows/MSVC 构建、单元测试、独立安装包播放及安装/卸载由本仓库 Actions 在 Windows 上验证，
@@ -133,8 +130,8 @@ ninja -C build windows_all
 测试时将所选 Qt 的 `bin/` 和 MPV DLL 目录加入 PATH，再运行 `ctest --test-dir build --output-on-failure`。
 推荐流程中的 `test.bat` 会自动设置这些路径。打包产物在 `build/` 下：
 
-- `JellyfinDesktop-2.0.5-Lain-x64.exe` —— Inno Setup 安装包
-- `JellyfinDesktop-2.0.5-Lain-x64.zip` —— 便携版
+- `JellyfinDesktop-2.0.6-Lain-x64.exe` —— Inno Setup 安装包
+- `JellyfinDesktop-2.0.6-Lain-x64.zip` —— 便携版
 - `output/` —— 可直接运行的目录（`Jellyfin Desktop.exe` + Qt/libmpv 等 DLL）
 
 ## 5. 已知坑

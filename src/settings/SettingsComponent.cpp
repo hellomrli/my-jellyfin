@@ -127,7 +127,6 @@ void SettingsComponent::setSettingCommand(const QString& args)
   QString jsonString = "{\"value\": " + settingValue + "}";
   QJsonParseError err;
   QVariant value = QJsonDocument::fromJson(jsonString.toUtf8(), &err).object()["value"].toVariant();
-  printf("val: '%s'\n", settingValue.toUtf8().data());
   if (!value.isValid())
   {
     qCritical() << "Invalid settings value:" << settingValue << "(if it's a string, make sure to quote it)";
@@ -276,6 +275,7 @@ void SettingsComponent::loadConf(const QString& path, bool storage)
   }
 
   QJsonObject jsonSections = json["sections"].toObject();
+  bool cleanedServerAddress = false;
 
   for(const QString& section : jsonSections.keys())
   {
@@ -297,7 +297,11 @@ void SettingsComponent::loadConf(const QString& path, bool storage)
 
     for(const QString& setting : jsonSection.keys())
       sec->setValue(setting, jsonSection.value(setting).toVariant());
+    if (!storage && section == SETTINGS_SECTION_MAIN && jsonSection.contains("userWebClient"))
+      cleanedServerAddress = jsonSection.value("userWebClient").toVariant() != sec->value("userWebClient");
   }
+  if (cleanedServerAddress)
+    saveSettings();
 
 #ifdef DISABLE_UPDATE_CHECK
     getSection(SETTINGS_SECTION_MAIN)->setValueHidden("checkForUpdates", "true");
@@ -498,6 +502,17 @@ QVariantList SettingsComponent::settingDescriptions()
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
+QVariantMap SettingsComponent::webClientSettings()
+{
+  QVariantMap descriptions;
+  const auto groups = settingDescriptions();
+  for (const auto& group : groups) {
+    const auto section = group.toMap();
+    descriptions.insert(section.value("key").toString(), section.value("settings"));
+  }
+  return {{"settings", allValues()}, {"settingsDescriptions", descriptions}, {"sections", orderedSections()}};
+}
+
 bool SettingsComponent::loadDescription()
 {
   QJsonParseError err;
@@ -749,7 +764,7 @@ QString SettingsComponent::getWebClientUrl(bool desktop)
     url = "qrc:///web-client/extension/find-webclient.html";
   }
 
-  qDebug() << "Using web-client URL: " << url;
+  qDebug() << "Using web-client URL: " << SystemComponent::urlForLog(QUrl(url));
 
   return url;
 }

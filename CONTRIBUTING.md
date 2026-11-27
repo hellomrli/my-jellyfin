@@ -2,7 +2,7 @@
 
 ## Running Tests
 
-Jellyfin Desktop uses Qt Test for native unit tests, Node.js for playback-adapter
+Jellyfin Desktop uses Qt Test for native tests, Node.js for playback and connection
 regressions, and Python unittest for Qt installer package selection.
 
 ### Building Tests
@@ -38,12 +38,12 @@ cd build
 The Windows/macOS `dev/*/test.*` scripts set up runtime Qt/MPV paths for unbundled
 builds. The window-manager test uses Qt's offscreen platform in CTest.
 
-### Playback Adapter and Installer Tests
+### Web Adapter and Installer Tests
 
 These suites do not need a running GUI, libmpv or a Jellyfin server:
 
 ```sh
-node --test tests/test_mpvPlayers.js
+node --test tests/test_mpvPlayers.js tests/test_connectivity.js
 python -m pip install -r dev/requirements-build.txt
 python -m unittest discover -s tests -p 'test_install_qt.py' -v
 ```
@@ -61,6 +61,20 @@ python dev/install-qt.py windows desktop 6.12.0 win64_msvc2022_64 \
 The JS tests cover direct/transcoded audio mapping, embedded/external subtitles,
 pre-play selections, subtitle offset on stream reload, integer/zero volume,
 buffering events, signal cleanup, playback-state reset and SyncPlay position units.
+Connection tests cover cancellation before WebChannel starts, overlapping requests
+to the same URL, listener cleanup, address validation, repeated submissions, and
+saved-server startup without overwriting manual input or reviving cancelled work.
+They also check that the form is usable before the bridge is ready, button cancellation
+and immediate retry, visible validation with error cleanup on editing, bridge failure
+and timeout recovery, and Chinese region/script language tags.
+
+The native `test_systemcomponent` suite also starts HTTP servers on loopback with
+automatically assigned ports. It checks real Qt reply cancellation during HEAD/GET,
+timeout recovery, invalid server responses, HEAD rejection, retry cancellation,
+request IDs, IPv6 and encoded reverse-proxy paths. Timeout tests invoke the production
+deadline handlers with a zero delay; they cover a 30-second reply timeout, the shared
+60-second budget across retries, and a new attempt to the same URL. They do not wait
+for a real timeout or contact external servers. Only the IPv6 network case is skipped if IPv6 loopback is unavailable.
 
 The native `test_playercomponent` suite covers millisecond position/duration caches,
 100 ms position notifications, unavailable properties and file boundaries, reactive
@@ -85,7 +99,14 @@ node tests/smoke_packaged_player.cjs /path/to/application /tmp/player-smoke
 ```
 
 Linux can use Xvfb. The test drives the injected playback adapter through a local
-WebEngine debugger, checks MPV's selected audio IDs, pause/resume/seek, zero volume
+WebEngine debugger. A local HTTP fixture first checks the packaged connection bridge,
+refreshing native settings on reload despite stale session storage, redirects and
+encoded base paths, cancellation during HEAD, replacing a pending GET
+to the same address, Escape and the Cancel button restoring the real connection form,
+keyboard focus, visible address validation, and layout in a 360-pixel viewport.
+It saves screenshots of the form, progress, validation error and small-window layout
+alongside `result.json` and the application log. It then checks
+MPV's selected audio IDs, pause/resume/seek, zero volume
 and subtitle delay. It also verifies that the native SyncPlay position is in
 milliseconds, native duration uses the same units, paused video stays visible,
 invalid audio-device settings reach MPV as `auto`, and stopping clears the native
@@ -176,6 +197,7 @@ For more information on Qt Test, see the [Qt Test documentation](https://doc.qt.
 Automated tests and a local-file smoke test do not replace these checks against
 a real Jellyfin server and the target operating system after a Qt/libmpv upgrade:
 
+- Connections: test IPv6 and reverse-proxy URLs, saved-server startup, Esc/button cancellation and immediately connecting again; verify recovery after a stalled network request and that cancelling does not change the saved server. Check invalid-address messages, focus returning to the address field, Chinese language tags and layout at high zoom or in a small window.
 - Direct play and direct stream: select the second/third audio track before and during playback; also test media with non-contiguous track IDs and a fallback transcoding URL.
 - Forced transcoding: select a non-default original audio track, switch it during playback, change bitrate and seek; the single output audio track must remain audible and in sync.
 - Subtitles: switch embedded/external/off selections, select a different media source on the details page, set an offset and reload the stream; preserve the offset on reload and reset it for a new item.

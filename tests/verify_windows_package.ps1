@@ -22,6 +22,8 @@ function Assert-Package([string]$directory) {
         "libmpv-2.dll", "libmpv-fallback.dll", "opengl32sw.dll",
         "vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll",
         "plugins/platforms/qwindows.dll", "qml/QtWebEngine/qmldir",
+        "qml/QtWebEngine/ControlsDelegates/qmldir", "qml/QtWebEngine/ControlsDelegates/ToolTip.qml",
+        "qml/QtWebEngine/ControlsDelegates/ConfirmDialog.qml", "qml/QtWebEngine/ControlsDelegates/qtwebenginequickdelegatesplugin.dll",
         "qml/QtQuick/qmldir", "resources/icudtl.dat",
         "resources/qtwebengine_resources.pak", "qt.conf", "LICENSE"
     )) {

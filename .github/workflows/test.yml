@@ -23,9 +23,9 @@ jobs:
       with:
         python-version: '3.13'
 
-    - name: Test playback adapters and Qt installer
+    - name: Test web adapters and Qt installer
       run: |
-        node --test tests/test_mpvPlayers.js
+        node --test tests/test_mpvPlayers.js tests/test_connectivity.js
         python -m pip install -r dev/requirements-build.txt
         python -m unittest discover -s tests -p 'test_install_qt.py'
 

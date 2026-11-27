@@ -1,20 +1,26 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Jellyfin</title>
     <link rel="stylesheet" href="find-webclient.css">
 </head>
 <body>
     <div id="container">
-        <img class="logo" src="logo.png">
-        <form id="connect-form">
+        <img class="logo" src="logo.png" alt="Jellyfin">
+        <form id="connect-form" aria-busy="false">
             <h1 id="title"></h1>
-            <div id="spinner"></div>
-            <input type="text" id="address" autofocus>
+            <div id="spinner" aria-hidden="true"></div>
+            <input type="text" id="address" aria-labelledby="title" aria-describedby="connection-error"
+                autocomplete="url" autocapitalize="none" spellcheck="false" autofocus>
+            <p id="connection-status" role="status" hidden></p>
+            <p id="connection-error" role="alert" hidden></p>
             <button id="connect-button" type="submit"></button>
+            <button id="cancel-button" type="button" hidden></button>
         </form>
     </div>
     <script src="find-webclient.lang.js"></script>
     <script src="find-webclient.js"></script>
+</body>
 </html>

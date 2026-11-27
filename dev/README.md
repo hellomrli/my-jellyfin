@@ -16,7 +16,7 @@ Windows/macOS setup scripts and CI share these pins:
 | Qt | 6.12.0 | `qt-version.txt` |
 | Qt WebEngine for Qt 6.12 | **6.140.0** (repository channel `61400`) | `install-qt.py` and official repository metadata |
 | aqtinstall | 3.3.0 | `requirements-build.txt` |
-| Windows libmpv | 20261018-git-01e2533f31 | `mpv-version.txt` |
+| Windows libmpv | 20261108-git-55d3feb45c | `mpv-version.txt` |
 
 As checked on 2026-11-14, Qt 6.12.0 remains the latest publicly released stable
 version. Its matching WebEngine package was updated on 2026-11-11 and is officially
@@ -24,7 +24,7 @@ labelled **Qt WebEngine 6.140.0**, without an RC suffix. The installer build ver
 is `6.12.0-0-202611110526`, belonging to the Qt 6.12.0 kit. CMake reports Core
 `6.12.0` and WebEngine `6.140.0`; the different version numbers are expected.
 The `2.0.4-Lain` release used the earlier WebEngine RC package; the updated
-package is selected for `2.0.5-Lain` builds.
+package is selected for the `2.0.5-Lain` CI build and `2.0.6-Lain`.
 
 Use `install-qt.py`, not plain `aqt install-qt`, with the pinned Python requirements.
 The adapter handles the new Windows base-package path and the versioned WebEngine

@@ -1,4 +1,5 @@
 #include <QDebug>
+#include <QUrl>
 #include "SettingsSection.h"
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -25,6 +26,12 @@ void SettingsSection::registerSetting(SettingsValue* value)
 void SettingsSection::setValues(const QVariant& values)
 {
   QVariantMap map = values.toMap();
+  if (m_sectionID == SETTINGS_SECTION_MAIN && map.contains("userWebClient")) {
+    const QUrl url(map.value("userWebClient").toString().trimmed());
+    const bool valid = url.isValid() && !url.host().isEmpty() && url.userInfo().isEmpty() &&
+                       (url.scheme() == "http" || url.scheme() == "https");
+    map["userWebClient"] = valid ? url.toString(QUrl::RemoveQuery | QUrl::RemoveFragment | QUrl::FullyEncoded) : QString();
+  }
   QVariantMap updatedValues;
 
   // values not included in the map are "removed"

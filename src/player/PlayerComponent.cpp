@@ -212,6 +212,8 @@ void PlayerComponent::initializeMpv()
   mpv_observe_property(m_mpv->mpv(), 0, "vo-configured", MPV_FORMAT_FLAG);
   mpv_observe_property(m_mpv->mpv(), 0, "duration", MPV_FORMAT_DOUBLE);
   mpv_observe_property(m_mpv->mpv(), 0, "audio-device-list", MPV_FORMAT_NODE);
+  mpv_observe_property(m_mpv->mpv(), 0, "audio-codec-name", MPV_FORMAT_STRING);
+  mpv_observe_property(m_mpv->mpv(), 0, "audio-params/channel-count", MPV_FORMAT_INT64);
   mpv_observe_property(m_mpv->mpv(), 0, "video-dec-params", MPV_FORMAT_NODE);
   mpv_observe_property(m_mpv->mpv(), 0, "demuxer-cache-state", MPV_FORMAT_NODE);
 
@@ -624,6 +626,10 @@ void PlayerComponent::handleMpvEvent(mpv_event *event)
       else if (strcmp(prop->name, "audio-device-list") == 0)
       {
         updateAudioDeviceList();
+      }
+      else if (strcmp(prop->name, "audio-codec-name") == 0 || strcmp(prop->name, "audio-params/channel-count") == 0)
+      {
+        refreshAc3Filter();
       }
       else if (strcmp(prop->name, "demuxer-cache-state") == 0 && prop->format == MPV_FORMAT_NODE)
       {
@@ -1353,18 +1359,10 @@ void PlayerComponent::setAudioConfiguration()
   // here for now. We might need to add support for DTS transcoding
   // if we see user requests for it.
   //
-  bool wasAc3Transcoding = m_doAc3Transcoding;
   m_doAc3Transcoding =
   (deviceType == AUDIO_DEVICE_TYPE_SPDIF &&
    SettingsComponent::Get().value(SETTINGS_SECTION_AUDIO, "passthrough.ac3").toBool());
-  if (m_doAc3Transcoding && !wasAc3Transcoding)
-  {
-    m_mpv->command( QStringList() << "af" << "add" << "@ac3:lavcac3enc");
-  }
-  else if (!m_doAc3Transcoding && wasAc3Transcoding)
-  {
-    m_mpv->command( QStringList() << "af" << "remove" << "@ac3");
-  }
+  refreshAc3Filter();
 
   QVariant device = SettingsComponent::Get().value(SETTINGS_SECTION_AUDIO, "device");
 
@@ -1380,6 +1378,24 @@ void PlayerComponent::setAudioConfiguration()
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+void PlayerComponent::refreshAc3Filter()
+{
+  if (!m_mpv || (!m_doAc3Transcoding && !m_ac3FilterActive))
+    return;
+  updateAc3Filter(m_mpv->getProperty("audio-codec-name").toString(),
+                  m_mpv->getProperty("audio-params/channel-count").toInt());
+}
+
+void PlayerComponent::updateAc3Filter(const QString& codec, int channels)
+{
+  const bool needed = m_doAc3Transcoding && channels > 2 && !codec.isEmpty() && !m_passthroughCodecs.contains(codec);
+  if (needed == m_ac3FilterActive)
+    return;
+  const QStringList command = needed ? QStringList{"af", "add", "@ac3:lavcac3enc"} : QStringList{"af", "remove", "@ac3"};
+  if (m_mpv->command(command).metaType() != QMetaType::fromType<ErrorReturn>())
+    m_ac3FilterActive = needed;
+}
+
 void PlayerComponent::updateSubtitleConfiguration()
 {
   setSubtitleConfiguration();

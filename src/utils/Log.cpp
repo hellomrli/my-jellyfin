@@ -9,6 +9,7 @@
 #include <QDir>
 #include <QFile>
 #include <QRecursiveMutex>
+#include <QRegularExpression>
 #include <QScopedValueRollback>
 #include <QUuid>
 #include <iostream>
@@ -93,10 +94,15 @@ static void elidePattern(QString& msg, const QString& substring, qsizetype chars
 /////////////////////////////////////////////////////////////////////////////////////////
 void Log::CensorAuthTokens(QString& msg)
 {
+  if (msg.contains(QLatin1String("://"))) {
+    static const QRegularExpression userInfo(R"((\bhttps?://)[^/\s?#"'<>]*@)", QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression suffix(R"((\bhttps?://[^\s?#"'<>]*)[?#][^\s"'<>]*)", QRegularExpression::CaseInsensitiveOption);
+    msg.replace(userInfo, QStringLiteral("\\1"));
+    msg.replace(suffix, QStringLiteral("\\1"));
+  }
   elidePattern(msg, "api_key=", 32);
   elidePattern(msg, "X-MediaBrowser-Token%3D", 32);
   elidePattern(msg, "X-MediaBrowser-Token=", 32);
-  elidePattern(msg, "api_key=", 32);
   elidePattern(msg, "ApiKey=", 32);
   elidePattern(msg, "AccessToken=", 32);
   elidePattern(msg, "AccessToken\":\"", 32);

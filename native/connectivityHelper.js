@@ -1,61 +1,70 @@
 window.jmpCheckServerConnectivity = (() => {
-    let activeController = null;
+    let activeCheck = null;
+    let nextRequest = 0;
+    const sessionId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const connectivityError = (code, message) => Object.assign(new Error(message), { code });
 
-    const checkFunc = async function(url) {
-        // Abort any in-progress check
-        if (activeController) {
-            activeController.abort();
-        }
-
-        // Wait for API
-        let attempts = 0;
-        while (!window.api && attempts < 50) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-            attempts++;
-        }
-        if (!window.api) {
-            throw new Error('WebChannel not available');
-        }
-
-        // Create abort controller for this check
-        const controller = new AbortController();
-        activeController = controller;
+    const checkFunc = function(url) {
+        checkFunc.abort();
 
         return new Promise((resolve, reject) => {
-            // Handle abort
-            controller.signal.addEventListener('abort', () => {
-                if (handler) {
-                    window.api.system.serverConnectivityResult.disconnect(handler);
-                }
-                reject(new Error('Connection cancelled'));
-            });
+            const requestId = `${sessionId}-${++nextRequest}`;
+            let system = null;
+            let handler = null;
+            let timer = null;
+            let settled = false;
+            let attempts = 0;
 
-            let handler = (resultUrl, success, resolvedUrl) => {
-                if (resultUrl === url && !controller.signal.aborted) {
-                    window.api.system.serverConnectivityResult.disconnect(handler);
+            const finish = (error, resolvedUrl) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timer);
+                if (handler) {
+                    system.serverConnectivityResult.disconnect(handler);
                     handler = null;
-                    if (activeController === controller) {
-                        activeController = null;
-                    }
-                    if (success) {
-                        resolve(resolvedUrl);
-                    } else {
-                        reject(new Error('Connection failed'));
-                    }
                 }
+                if (activeCheck === check) activeCheck = null;
+                if (error) reject(error);
+                else resolve(resolvedUrl);
             };
 
-            window.api.system.serverConnectivityResult.connect(handler);
-            window.api.system.checkServerConnectivity(url);
+            const check = {
+                cancel() {
+                    finish(connectivityError('cancelled', 'Connection cancelled'));
+                    if (system) system.cancelServerConnectivity();
+                }
+            };
+            // Register before waiting for WebChannel so Esc also cancels startup work.
+            activeCheck = check;
+
+            const start = () => {
+                timer = null;
+                if (settled) return;
+                if (!window.api || !window.api.system) {
+                    if (attempts++ < 50) timer = setTimeout(start, 100);
+                    else finish(connectivityError('unavailable', 'WebChannel not available'));
+                    return;
+                }
+
+                system = window.api.system;
+                handler = (resultUrl, success, resolvedUrl, resultId) => {
+                    if (resultUrl === url && resultId === requestId) {
+                        finish(success ? null : connectivityError(resolvedUrl || 'failed', 'Connection failed'), resolvedUrl);
+                    }
+                };
+                try {
+                    system.serverConnectivityResult.connect(handler);
+                    system.checkServerConnectivity(url, requestId);
+                } catch (error) {
+                    finish(error);
+                }
+            };
+            start();
         });
     };
 
-    // Expose abort function for cancellation
     checkFunc.abort = () => {
-        if (activeController) {
-            activeController.abort();
-            activeController = null;
-        }
+        if (activeCheck) activeCheck.cancel();
     };
 
     return checkFunc;

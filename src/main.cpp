@@ -523,7 +523,7 @@ int main(int argc, char *argv[])
 
             // Only fix WebEngineView dropdowns (Tool + FramelessWindowHint + WindowStaysOnTopHint)
             // Don't touch other windows (e.g., MPV-related)
-            bool isWebEnginePopup = (flags & Qt::Tool) &&
+            bool isWebEnginePopup = (flags & Qt::WindowType_Mask) == Qt::Tool &&
                                      (flags & Qt::FramelessWindowHint) &&
                                      (flags & Qt::WindowStaysOnTopHint);
 

@@ -77,6 +77,31 @@ function fixture(savedVolume = 0.5) {
     };
 }
 
+for (const item of [{}, { Id: 'trailer' }]) {
+    test(`trailer: player events attach even when ${item.Id ? 'metadata fails' : 'the item has no ID'}`, async () => {
+        const listeners = new Map();
+        const manager = { getPlayerState: () => ({ NowPlayingItem: item }) };
+        let metadataCalls = 0;
+        let ready;
+        const initialized = new Promise(resolve => { ready = resolve; });
+        const api = {
+            input: { hostInput: signal(), volumeChanged: signal(), rateChanged: signal(), positionSeek: signal() },
+            system: { hello: ready },
+            player: { playbackRateChanged: signal(), notifyMetadata() { metadataCalls++; throw Error('Metadata unavailable'); } }
+        };
+        const window = {
+            api, apiPromise: Promise.resolve(api), jmpInfo: { settings: { main: {} }, settingsUpdate: [] },
+            Events: { on(target, name, callback) { listeners.set(name, callback); } }
+        };
+        vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../native/inputPlugin.js'), 'utf8'), { window, console });
+        new window._inputPlugin({ playbackManager: manager });
+        await initialized;
+        listeners.get('playbackstart')(null, {});
+        assert.equal(metadataCalls, item.Id ? 1 : 0);
+        assert.equal(typeof listeners.get('playing'), 'function');
+    });
+}
+
 function options(playMethod = 'DirectPlay', mediaSource = {}) {
     return {
         item: { Id: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
@@ -288,6 +313,13 @@ for (const kind of ['video', 'audio']) {
         f.native.buffering.emit(10);
         assert.equal(f.eventCount('waiting'), 3);
         assert.equal(f.eventCount('unpause'), 1);
+        if (kind === 'video') {
+            assert.equal(f.eventCount('canplay'), 2);
+            await f[kind].stop(false);
+            assert.equal(f.eventCount('canplay'), 3);
+            f.native.playing.emit();
+            assert.equal(f.eventCount('canplay'), 3);
+        }
     });
 
     test(`${kind}: destroy removes every native signal and reconnection is not duplicated`, async () => {

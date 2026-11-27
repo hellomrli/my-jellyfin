@@ -37,6 +37,7 @@ private slots:
   void invalidAudioDevice_data();
   void invalidAudioDevice();
   void disconnectedAudioDeviceIsRetained();
+  void spdifFilterTracksFormat();
 
 private:
   static void property(PlayerComponent& player, const char* name, mpv_format format, void* data = nullptr)
@@ -202,6 +203,33 @@ void TestPlayerComponent::videoVisibilityUpdatesQmlWhilePaused()
   property(player, "vo-configured", MPV_FORMAT_FLAG, &disabled);
   QCOMPARE(changes.count(), 2);
   QCOMPARE(visible.evaluate().toBool(), false);
+}
+
+void TestPlayerComponent::spdifFilterTracksFormat()
+{
+  MpvController controller;
+  controller.init();
+  PlayerComponent player;
+  player.setMpvController(&controller);
+  player.m_doAc3Transcoding = true;
+  player.m_passthroughCodecs = {"ac3", "dts"};
+  const auto filters = [&controller]() { return controller.getProperty("af").toList(); };
+  for (const QString& codec : {QString("aac"), QString("flac")}) {
+    player.updateAc3Filter(codec, 6);
+    QCOMPARE(filters().size(), 1);
+    QCOMPARE(filters().first().toMap().value("label").toString(), QString("ac3"));
+  }
+  for (const QString& codec : player.m_passthroughCodecs) {
+    player.updateAc3Filter(codec, 6);
+    QVERIFY(filters().isEmpty());
+  }
+  player.updateAc3Filter("pcm_s16le", 2);
+  QVERIFY(filters().isEmpty());
+  player.updateAc3Filter("pcm_s16le", 6);
+  QCOMPARE(filters().size(), 1);
+  player.m_doAc3Transcoding = false;
+  player.updateAc3Filter("pcm_s16le", 6);
+  QVERIFY(filters().isEmpty());
 }
 
 void TestPlayerComponent::invalidAudioDevice_data()

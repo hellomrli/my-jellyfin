@@ -183,7 +183,7 @@
                     window.api.player.setVideoRectangle(0, 0, 0, 0);
                 }
 
-                this._waiting = false;
+                this.finishWaiting();
 
                 if (this._paused) {
                     this._paused = false;
@@ -197,7 +197,7 @@
              * @private
              */
             this.onPause = () => {
-                this._waiting = false;
+                this.finishWaiting();
                 this._paused = true;
                 // For Syncplay ready notification
                 this.events.trigger(this, 'pause');
@@ -252,10 +252,16 @@
             return this._currentSrc;
         }
 
+        finishWaiting() {
+            if (!this._waiting) return;
+            this._waiting = false;
+            this.events.trigger(this, 'canplay');
+        }
+
         async play(options) {
             this._started = false;
             this._timeUpdated = false;
-            this._waiting = false;
+            this.finishWaiting();
             this._currentTime = null;
             this._duration = undefined;
             this._bufferedRanges = [];
@@ -551,6 +557,7 @@
         }
 
         onEndedInternal() {
+            this.finishWaiting();
             const stopInfo = {
                 src: this._currentSrc
             };
@@ -562,7 +569,6 @@
             this._currentPlayOptions = null;
             this._prePlayAudioSelection = null;
             this._prePlaySubtitleSelection = null;
-            this._waiting = false;
         }
 
         stop(destroyPlayer) {
@@ -601,7 +607,7 @@
 
             const player = window.api.player;
             this._hasConnection = false;
-            this._waiting = false;
+            this.finishWaiting();
             this._currentPlayOptions = null;
             this._prePlayAudioSelection = null;
             this._prePlaySubtitleSelection = null;

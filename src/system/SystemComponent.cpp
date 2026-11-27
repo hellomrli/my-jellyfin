@@ -18,7 +18,6 @@
 #include <QSslError>
 #include <QDebug>
 #include <QRegularExpression>
-#include <QPointer>
 #include <functional>
 
 #include <QtWebEngineCore/qtwebenginecoreglobal.h>
@@ -62,9 +61,17 @@ SystemComponent::SystemComponent(QObject* parent) : ComponentBase(parent), m_pla
 {
   m_connectivityRetryTimer = new QTimer(this);
   m_connectivityRetryTimer->setSingleShot(true);
-  connect(m_connectivityRetryTimer, &QTimer::timeout, [this]() {
-    qInfo() << "Retrying connectivity check for" << m_pendingConnectivityUrl;
-    checkServerConnectivity(m_pendingConnectivityUrl);
+  connect(m_connectivityRetryTimer, &QTimer::timeout, this, &SystemComponent::runConnectivityAttempt);
+  m_connectivityDeadline.setSingleShot(true);
+  m_connectivityDeadline.setTimerType(Qt::PreciseTimer);
+  connect(&m_connectivityDeadline, &QTimer::timeout, this, [this]() {
+    if (m_pendingConnectivityUrl.isEmpty())
+      return;
+    const QString url = m_pendingConnectivityUrl;
+    const QString requestId = m_pendingConnectivityRequestId;
+    const QString failure = m_connectivityFailure;
+    cancelServerConnectivity();
+    emit serverConnectivityResult(url, false, failure, requestId);
   });
 
   m_networkManager = new QNetworkAccessManager(this);
@@ -215,40 +222,36 @@ void SystemComponent::jsLog(int level, QString text)
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+QString SystemComponent::urlForLog(const QUrl& url)
+{
+  return url.toString(QUrl::RemoveUserInfo | QUrl::RemoveQuery | QUrl::RemoveFragment | QUrl::FullyEncoded);
+}
+
 QString SystemComponent::extractBaseUrl(const QString& url)
 {
   QUrl parsedUrl(url);
-  QString path = parsedUrl.path();
+  if (!parsedUrl.isValid() || parsedUrl.host().isEmpty() ||
+      (parsedUrl.scheme() != "http" && parsedUrl.scheme() != "https"))
+    return QString();
 
-  // Find last occurrence of "/web" in path only (case-insensitive)
-  qsizetype webIndex = path.toLower().lastIndexOf("/web");
+  // Match a complete /web path segment, preserving encoded slashes in proxy paths.
+  const QString path = parsedUrl.path(QUrl::FullyEncoded);
+  static const QRegularExpression webSegment("/web(?=/|$)", QRegularExpression::CaseInsensitiveOption);
+  auto matches = webSegment.globalMatch(path);
+  QString basePath;
+  while (matches.hasNext())
+    basePath = path.left(matches.next().capturedStart());
 
-  if (webIndex >= 0) {
-    // Truncate path at /web
-    path = path.left(webIndex);
+  parsedUrl.setPath(basePath, QUrl::StrictMode);
+  parsedUrl.setUserInfo(QString());
+  parsedUrl.setQuery(QString());
+  parsedUrl.setFragment(QString());
+  if ((parsedUrl.scheme() == "https" && parsedUrl.port() == 443) ||
+      (parsedUrl.scheme() == "http" && parsedUrl.port() == 80))
+    parsedUrl.setPort(-1);
 
-    // Build URL without fragment/query
-    QString result = parsedUrl.scheme() + "://" + parsedUrl.host();
-    int port = parsedUrl.port();
-    if (port != -1 &&
-        !((parsedUrl.scheme() == "https" && port == 443) ||
-          (parsedUrl.scheme() == "http" && port == 80))) {
-      result += ":" + QString::number(port);
-    }
-    result += path;
-    return result;
-  }
-
-  // Fallback to origin (scheme://host:port, excluding default ports and userinfo)
-  QString origin = parsedUrl.scheme() + "://" + parsedUrl.host();
-  int port = parsedUrl.port();
-  // Only add port if non-default (443 for https, 80 for http)
-  if (port != -1 &&
-      !((parsedUrl.scheme() == "https" && port == 443) ||
-        (parsedUrl.scheme() == "http" && port == 80))) {
-    origin += ":" + QString::number(port);
-  }
-  return origin;
+  // Let QUrl serialize the authority, including IPv6 brackets.
+  return parsedUrl.toString(QUrl::FullyEncoded);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -272,10 +275,9 @@ QSslConfiguration SystemComponent::getSSLConfiguration()
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 void SystemComponent::setReplyTimeout(QNetworkReply* reply, int ms)
 {
-  QPointer<QNetworkReply> replyPtr(reply);
-  QTimer::singleShot(ms, this, [replyPtr]() {
-    if (replyPtr && !replyPtr->isFinished()) {
-      replyPtr->abort();
+  QTimer::singleShot(ms, reply, [reply]() {
+    if (!reply->isFinished()) {
+      reply->abort();
     }
   });
 }
@@ -285,9 +287,10 @@ void SystemComponent::resolveUrl(const QString& url, std::function<void(const QS
 {
   // Abort any pending resolve
   if (m_resolveUrlReply) {
-    m_resolveUrlReply->abort();
-    m_resolveUrlReply->deleteLater();
+    QNetworkReply* reply = m_resolveUrlReply;
     m_resolveUrlReply = nullptr;
+    reply->abort();
+    reply->deleteLater();
   }
 
   QNetworkRequest request(url);
@@ -305,45 +308,59 @@ void SystemComponent::resolveUrl(const QString& url, std::function<void(const QS
             reply, QOverload<>::of(&QNetworkReply::ignoreSslErrors));
   }
   connect(reply, &QNetworkReply::finished, this, [this, reply, callback]() {
-    if (reply->error() == QNetworkReply::OperationCanceledError) {
-      reply->deleteLater();
-      if (m_resolveUrlReply == reply) {
-        m_resolveUrlReply = nullptr;
-      }
+    reply->deleteLater();
+    // Cancelled/replaced replies cannot complete a later request, even for the same URL.
+    if (m_resolveUrlReply != reply)
       return;
-    }
+    m_resolveUrlReply = nullptr;
 
     if (reply->error() != QNetworkReply::NoError) {
-      qWarning() << "resolveUrl: error:" << reply->errorString();
+      qWarning() << "resolveUrl: network error" << reply->error();
+      const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+      // Some servers reject HEAD (e.g. HTTP 405), but their API can still answer GET.
+      // Network failures and our timeout need a retry instead of leaving JS waiting.
+      if (reply->error() == QNetworkReply::OperationCanceledError || status < 400 || status >= 600) {
+        if (reply->error() != QNetworkReply::OperationCanceledError)
+          m_connectivityFailure = reply->error() == QNetworkReply::SslHandshakeFailedError ? "tlsError" : "networkError";
+        callback(QString());
+        return;
+      }
     }
 
-    callback(reply->url().toString());
-    reply->deleteLater();
-    if (m_resolveUrlReply == reply) {
-      m_resolveUrlReply = nullptr;
-    }
+    callback(reply->url().userInfo().isEmpty() ? reply->url().toString(QUrl::FullyEncoded) : QString());
   });
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-void SystemComponent::checkServerConnectivity(QString url)
+void SystemComponent::checkServerConnectivity(QString url, QString requestId)
 {
-  // Stop any pending retry
-  if (m_connectivityRetryTimer->isActive()) {
-    m_connectivityRetryTimer->stop();
-  }
-
-  if (m_connectivityCheckReply) {
-    m_connectivityCheckReply->abort();
-    m_connectivityCheckReply->deleteLater();
-    m_connectivityCheckReply = nullptr;
+  cancelServerConnectivity();
+  if (extractBaseUrl(url).isEmpty() || !QUrl(url).userInfo().isEmpty()) {
+    emit serverConnectivityResult(url, false, QStringLiteral("invalidAddress"), requestId);
+    return;
   }
 
   // Store for retry
   m_pendingConnectivityUrl = url;
+  m_pendingConnectivityRequestId = requestId;
+  m_connectivityFailure = QStringLiteral("timedOut");
+  m_connectivityDeadline.start(CONNECTIVITY_BUDGET_MS);
+  runConnectivityAttempt();
+}
 
-  resolveUrl(url, [this, url](const QString& fullResolvedUrl) {
+void SystemComponent::runConnectivityAttempt()
+{
+  if (m_pendingConnectivityUrl.isEmpty())
+    return;
+  const QString url = m_pendingConnectivityUrl;
+  const QString requestId = m_pendingConnectivityRequestId;
+
+  resolveUrl(url, [this, url, requestId](const QString& fullResolvedUrl) {
     QString baseUrl = extractBaseUrl(fullResolvedUrl);
+    if (baseUrl.isEmpty()) {
+      m_connectivityRetryTimer->start(CONNECTIVITY_RETRY_INTERVAL_MS);
+      return;
+    }
 
     QString checkUrl = baseUrl + "/System/Info/Public";
 
@@ -363,14 +380,11 @@ void SystemComponent::checkServerConnectivity(QString url)
               reply, QOverload<>::of(&QNetworkReply::ignoreSslErrors));
     }
 
-    connect(reply, &QNetworkReply::finished, this, [this, reply, url, fullResolvedUrl]() {
-      if (reply->error() == QNetworkReply::OperationCanceledError) {
-        reply->deleteLater();
-        if (m_connectivityCheckReply == reply) {
-          m_connectivityCheckReply = nullptr;
-        }
+    connect(reply, &QNetworkReply::finished, this, [this, reply, url, fullResolvedUrl, requestId]() {
+      reply->deleteLater();
+      if (m_connectivityCheckReply != reply)
         return;
-      }
+      m_connectivityCheckReply = nullptr;
 
       bool success = false;
       if (reply->error() == QNetworkReply::NoError) {
@@ -379,23 +393,20 @@ void SystemComponent::checkServerConnectivity(QString url)
         if (doc.isObject() && doc.object().contains("Id") && !doc.object()["Id"].toString().isEmpty()) {
           success = true;
         } else {
+          m_connectivityFailure = QStringLiteral("invalidResponse");
           qWarning() << "checkServerConnectivity: invalid response";
         }
       } else {
-        qWarning() << "checkServerConnectivity: error:" << reply->errorString();
+        if (reply->error() != QNetworkReply::OperationCanceledError)
+          m_connectivityFailure = reply->error() == QNetworkReply::SslHandshakeFailedError ? "tlsError" : "networkError";
+        qWarning() << "checkServerConnectivity: network error" << reply->error();
       }
 
       if (success) {
-        m_connectivityRetryTimer->stop();
-        m_pendingConnectivityUrl.clear();
-        emit serverConnectivityResult(url, success, fullResolvedUrl);
+        cancelServerConnectivity();
+        emit serverConnectivityResult(url, success, fullResolvedUrl, requestId);
       } else {
         m_connectivityRetryTimer->start(CONNECTIVITY_RETRY_INTERVAL_MS);
-      }
-
-      reply->deleteLater();
-      if (m_connectivityCheckReply == reply) {
-        m_connectivityCheckReply = nullptr;
       }
     });
   });
@@ -404,6 +415,8 @@ void SystemComponent::checkServerConnectivity(QString url)
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 void SystemComponent::cancelServerConnectivity()
 {
+  m_connectivityDeadline.stop();
+  m_connectivityFailure.clear();
   if (m_connectivityRetryTimer->isActive()) {
     m_connectivityRetryTimer->stop();
   }
@@ -425,6 +438,7 @@ void SystemComponent::cancelServerConnectivity()
   }
 
   m_pendingConnectivityUrl.clear();
+  m_pendingConnectivityRequestId.clear();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -450,7 +464,7 @@ QString SystemComponent::debugInformation()
   stream << "Jellyfin\n";
   stream << "  Version: " << Version::GetVersionString() << " built: " << Version::GetBuildDate() << "\n";
   stream << "  Web Client Version: " << Version::GetWebVersion() << "\n";
-  stream << "  Web Client URL: " << SettingsComponent::Get().value(SETTINGS_SECTION_PATH, "startupurl").toString() << "\n";
+  stream << "  Web Client URL: " << urlForLog(SettingsComponent::Get().value(SETTINGS_SECTION_PATH, "startupurl").toUrl()) << "\n";
   stream << "  Platform: " << getPlatformTypeString() << "-" << getPlatformArchString() << "\n";
   stream << "  User-Agent: " << getUserAgent() << "\n";
   stream << "  Qt version: " << qVersion() << QString("(%1)").arg(Version::GetQtDepsVersion()) << "\n";
@@ -549,7 +563,7 @@ QString SystemComponent::getNativeShellScript()
   auto path = SettingsComponent::Get().getExtensionPath();
   qDebug() << QString("Using path for extension: %1").arg(path);
 
-  QJsonObject clientData;
+  QJsonObject clientData = QJsonObject::fromVariantMap(SettingsComponent::Get().webClientSettings());
   clientData.insert("deviceName", QJsonValue::fromVariant(SettingsComponent::Get().getClientName()));
   clientData.insert("version", QJsonValue::fromVariant(Version::GetVersionString()));
   clientData.insert("userAgent", QJsonValue::fromVariant(getUserAgent()));
@@ -568,16 +582,6 @@ QString SystemComponent::getNativeShellScript()
     }
   }
   clientData.insert("mode", QJsonValue::fromVariant(defaultMode));
-
-  QVariantList settingsDescriptionsList = SettingsComponent::Get().settingDescriptions();
-  QVariantMap settingsDescriptions = QVariantMap();
-  for (auto setting : settingsDescriptionsList) {
-    QVariantMap settingMap = setting.toMap();
-    settingsDescriptions.insert(settingMap["key"].toString(), settingMap["settings"]);
-  }
-  clientData.insert("sections", QJsonValue::fromVariant(SettingsComponent::Get().orderedSections()));
-  clientData.insert("settingsDescriptions", QJsonValue::fromVariant(settingsDescriptions));
-  clientData.insert("settings", QJsonValue::fromVariant(SettingsComponent::Get().allValues()));
 
   QString jmpInfoDeclaration = "const jmpInfo = JSON.parse(window.atob(\"" +
                                 QJsonDocument(clientData).toJson(QJsonDocument::Compact).toBase64() +
@@ -613,7 +617,7 @@ QString SystemComponent::getNativeShellScript()
 /////////////////////////////////////////////////////////////////////////////////////////
 void SystemComponent::fetchPageForCSPWorkaround(QString url)
 {
-  qDebug() << "fetchPageForCSPWorkaround:" << url;
+  qDebug() << "fetchPageForCSPWorkaround:" << urlForLog(QUrl(url));
 
   QNetworkRequest request(url);
   request.setHeader(QNetworkRequest::UserAgentHeader, getUserAgent());
@@ -652,15 +656,14 @@ void SystemComponent::fetchPageForCSPWorkaround(QString url)
         if (headerName.toLower() == "content-security-policy" ||
             headerName.toLower() == "content-security-policy-report-only") {
           hadCSP = true;
-          QString headerValue = QString::fromUtf8(reply->rawHeader(header));
-          qInfo() << "CSP header detected:" << headerName << "=" << headerValue.left(100);
+          qInfo() << "CSP header detected:" << headerName;
         }
       }
 
       if (hadCSP) {
-        qInfo() << "CSP workaround: applying for" << url;
+        qInfo() << "CSP workaround: applying for" << urlForLog(QUrl(url));
       } else {
-        qDebug() << "No CSP detected for" << url;
+        qDebug() << "No CSP detected for" << urlForLog(QUrl(url));
       }
 
       emit pageContentReady(html, finalUrl, hadCSP);

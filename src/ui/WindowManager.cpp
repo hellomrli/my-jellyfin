@@ -512,10 +512,11 @@ void WindowManager::loadGeometry()
            << "maximizedKey=" << maximizedKey();
 
   QRect rect = loadGeometryRect();
+  const bool restoredSize = rect.isValid() && fitsInScreens(rect);
   qDebug() << "loadGeometry: loadGeometryRect returned" << rect;
 
   // Validate geometry fits in available screens
-  if (!fitsInScreens(rect))
+  if (!restoredSize)
   {
     QScreen* primary = QGuiApplication::primaryScreen();
     if (primary)
@@ -559,7 +560,7 @@ void WindowManager::loadGeometry()
   m_windowedGeometry = rect;
 
   // Store initial size for tracking if user changed it
-  m_initialSize = rect.size();
+  m_initialSize = restoredSize ? QSize() : rect.size();
   QScreen* primary = QGuiApplication::primaryScreen();
   if (primary)
     m_initialScreenSize = primary->geometry().size();
@@ -637,7 +638,7 @@ void WindowManager::saveWindowSize()
     // Check if size changed from initial (revert if unchanged)
     QScreen* primary = QGuiApplication::primaryScreen();
     QSize currentScreenSize = primary ? primary->geometry().size() : QSize();
-    bool sizeUnchanged = (size == m_initialSize && currentScreenSize == m_initialScreenSize);
+    bool sizeUnchanged = m_initialSize.isValid() && size == m_initialSize && currentScreenSize == m_initialScreenSize;
 
     qDebug() << "saveWindowSize: NOT maximized, saving size=" << size
              << "sizeUnchanged=" << sizeUnchanged

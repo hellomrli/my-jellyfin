@@ -952,18 +952,85 @@ function getDefaultLanguage() {
   return fallbackLanguage;
 }
 
-let language = getDefaultLanguage().toLowerCase();
+let language = getDefaultLanguage().replace(/_/g, '-').toLowerCase();
 
-if (!languages.find(l => l.lang === language)) {
+// Windows may report a script tag instead of one of Jellyfin's region tags.
+if (language.startsWith('zh-hans')) {
+  language = 'zh-cn';
+} else if (language.startsWith('zh-hant')) {
+  language = language.endsWith('-hk') ? 'zh-hk' : 'zh-tw';
+}
+
+const findLanguage = locale => languages.find(l => l.lang.replace(/_/g, '-').toLowerCase() === locale);
+
+if (!findLanguage(language)) {
   language = language.split('-')[0];
 }
 
-if (!languages.find(l => l.lang === language)) {
+if (language === 'zh') {
+  language = 'zh-cn';
+}
+
+if (!findLanguage(language)) {
   language = fallbackLanguage;
 }
 
-const languageStrings = languages.find(l => l.lang === language);
-const fallbackStrings = languages.find(l => l.lang === fallbackLanguage);
+const languageStrings = findLanguage(language);
+const fallbackStrings = findLanguage(fallbackLanguage);
+document.documentElement.lang = language;
+
+const connectionTranslations = {
+  'en-us': {
+    cancel: 'Cancel',
+    credentials: 'Enter a server address without a username or password.',
+    timedOut: 'The server did not respond within 60 seconds.',
+    invalidResponse: 'The server did not return valid Jellyfin information.',
+    tlsError: 'Could not establish a secure connection. Check the server certificate.',
+    networkError: 'The server could not be reached. Check the address and network.',
+    connecting: 'Connecting to server…',
+    invalidAddress: 'Enter a valid server address using HTTP or HTTPS.',
+    unavailable: 'The application is not ready yet. Please try again.'
+  },
+  'zh-cn': {
+    cancel: '取消',
+    credentials: '服务器地址中不能包含用户名或密码。',
+    timedOut: '服务器未在 60 秒内响应。',
+    invalidResponse: '服务器未返回有效的 Jellyfin 信息。',
+    tlsError: '无法建立安全连接，请检查服务器证书。',
+    networkError: '无法访问服务器，请检查地址和网络。',
+    connecting: '正在连接服务器…',
+    invalidAddress: '请输入有效的 HTTP 或 HTTPS 服务器地址。',
+    unavailable: '应用尚未就绪，请稍后重试。'
+  },
+  'zh-hk': {
+    cancel: '取消',
+    credentials: '伺服器地址不能包含用戶名稱或密碼。',
+    timedOut: '伺服器未在 60 秒內回應。',
+    invalidResponse: '伺服器未傳回有效的 Jellyfin 資訊。',
+    tlsError: '無法建立安全連線，請檢查伺服器憑證。',
+    networkError: '無法連接伺服器，請檢查地址和網絡。',
+    connecting: '正在連接伺服器…',
+    invalidAddress: '請輸入有效的 HTTP 或 HTTPS 伺服器地址。',
+    unavailable: '應用程式尚未就緒，請稍後重試。'
+  },
+  'zh-tw': {
+    cancel: '取消',
+    credentials: '伺服器位址不能包含使用者名稱或密碼。',
+    timedOut: '伺服器未在 60 秒內回應。',
+    invalidResponse: '伺服器未傳回有效的 Jellyfin 資訊。',
+    tlsError: '無法建立安全連線，請檢查伺服器憑證。',
+    networkError: '無法連線至伺服器，請檢查位址和網路。',
+    connecting: '正在連線至伺服器…',
+    invalidAddress: '請輸入有效的 HTTP 或 HTTPS 伺服器位址。',
+    unavailable: '應用程式尚未就緒，請稍後重試。'
+  }
+};
+
+window.jmpConnectionStrings = {
+  ...connectionTranslations[fallbackLanguage],
+  ...connectionTranslations[language],
+  failed: languageStrings.MessageUnableToConnectToServer || fallbackStrings.MessageUnableToConnectToServer
+};
 
 const titleText = languageStrings.LabelServerHost || fallbackStrings.LabelServerHost || 'Server Address';
 const connectText = languageStrings.Connect || fallbackStrings.Connect;
@@ -973,4 +1040,4 @@ document.getElementById('title').setAttribute('data-original-text', titleText);
 document.getElementById('address').placeholder = languageStrings.LabelServerHostHelp || fallbackStrings.LabelServerHostHelp;
 document.getElementById('connect-button').innerText = connectText;
 document.getElementById('connect-button').setAttribute('data-original-text', connectText);
-window.cancelButtonText = 'Cancel';
+document.getElementById('cancel-button').textContent = window.jmpConnectionStrings.cancel;

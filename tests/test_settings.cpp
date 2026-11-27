@@ -35,12 +35,22 @@ private slots:
   void testSectionDescriptionsSortsByIndexOrder();
   void testSetValueHidden();
   void testStorageFlag();
+  void savedServerAddressIsSanitized();
 };
 
 
 /*!
   SettingsValue
  */
+
+void TestSettings::savedServerAddressIsSanitized()
+{
+  SettingsSection main(SETTINGS_SECTION_MAIN);
+  main.setValue("userWebClient", "https://[::1]:8096/a%2Fb/web/?session=private#item");
+  QCOMPARE(main.value("userWebClient").toString(), QString("https://[::1]:8096/a%2Fb/web/"));
+  main.setValues(QVariantMap{{"userWebClient", "https://user:pass@example.test/web/"}});
+  QVERIFY(main.value("userWebClient").toString().isEmpty());
+}
 
 void TestSettings::testDefaultValueReturnedWhenNoExplicitValue()
 {

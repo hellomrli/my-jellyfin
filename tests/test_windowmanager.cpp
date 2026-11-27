@@ -15,6 +15,7 @@ private slots:
   void raisePreservesWindowState_data();
   void raisePreservesWindowState();
   void raiseRestoresMinimizedWindow();
+  void restoredSizeSurvivesSecondSave();
 
 private:
   SettingsSection* m_main = nullptr;
@@ -113,6 +114,28 @@ void TestWindowManager::raiseRestoresMinimizedWindow()
   QVERIFY(window.isVisible());
   QCOMPARE(window.visibility(), QWindow::Windowed);
   QCOMPARE(window.windowState(), Qt::WindowNoState);
+}
+
+void TestWindowManager::restoredSizeSurvivesSecondSave()
+{
+  auto* state = new SettingsSection(SETTINGS_SECTION_STATE, PLATFORM_ANY, -1, &SettingsComponent::Get());
+  SettingsComponent::Get().registerSection(state);
+  const QSize saved(560, 360);
+  for (int launch = 0; launch < 3; ++launch) {
+    QQuickWindow window;
+    WindowManager manager;
+    manager.m_window = &window;
+    manager.loadGeometry();
+    if (launch == 0) {
+      window.setPosition(0, 0);
+      window.resize(saved);
+    } else {
+      QCOMPARE(window.size(), saved);
+    }
+    manager.saveWindowSize();
+    QCOMPARE(state->value(manager.sizeWidthKey()).toInt(), saved.width());
+    QCOMPARE(state->value(manager.sizeHeightKey()).toInt(), saved.height());
+  }
 }
 
 QTEST_MAIN(TestWindowManager)
