@@ -155,6 +155,7 @@ ninja -C build windows_all
   对应脚本是 `tests/verify_windows_package.ps1`，需要 Node.js 22+、FFmpeg 和桌面会话。
 - **更新与签名**：发行构建关闭上游更新提示，避免误装回上游版本；从本仓库 Releases 更新。
   未配置 Windows 代码签名证书，系统可能显示未知发布者，请核对发布页 SHA-256。
+- **发布流程**：在 `main` 手动运行 `stage-windows-release`。它复用普通 Windows 构建和所有验收，使用固定并校验哈希的测试用 FFmpeg，不随包分发。通过后直接把安装版、便携版、构建信息和校验和上传到新草稿，不占用 Actions artifact 配额、不会覆盖既有标签。维护者复核提交和哈希后再发布。普通推送只读、不会创建 Release。
 - **ARM64**：本次仅适配 Windows x64；ARM64 交叉编译和打包未验证，CI 仍禁用。
 
 ## 6. 字体使用

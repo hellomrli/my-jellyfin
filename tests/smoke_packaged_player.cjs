@@ -328,7 +328,7 @@ async function main() {
         fontTests = { plainUrl: pathToFileURL(plain).href, assUrl: pathToFileURL(ass).href };
     }
     function ffmpeg(args) {
-        const result = spawnSync('ffmpeg', ['-nostdin', '-loglevel', 'error', '-y', ...args], {
+        const result = spawnSync(process.env.JELLYFIN_TEST_FFMPEG || 'ffmpeg', ['-nostdin', '-loglevel', 'error', '-y', ...args], {
             encoding: 'utf8', timeout: 60000
         });
         assert.equal(result.status, 0, result.error?.message || result.stderr);

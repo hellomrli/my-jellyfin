@@ -1,15 +1,5 @@
 name: build-windows
 
-permissions:
-  contents: read
-
-concurrency:
-  group: build-windows-${{ github.ref }}-${{ inputs.qt_version }}
-  cancel-in-progress: true
-
-env:
-  QT_VERSION: ${{ inputs.qt_version }}
-
 on:
   workflow_call:
     inputs:
@@ -23,153 +13,13 @@ on:
         type: string
         default: ""
   push:
-    branches:
-      - main
-      - master
+    branches: [main, master]
+
+permissions:
+  contents: read
 
 jobs:
   build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - artifact: windows-x64
-            qt_arch: win64_msvc2022_64
-            mpv_arch: x86_64-v3
-            mpv_arch_fallback: x86_64
-            vc_redist_arch: x64
-            vcvars: vcvars64.bat
-            machine: X64
-          # ARM64 remains disabled until cross-compilation and packaging are tested.
-          # - artifact: windows-arm64
-          #   qt_arch: win64_msvc2022_arm64
-          #   mpv_arch: aarch64
-          #   mpv_arch_fallback: ""
-          #   vc_redist_arch: arm64
-          #   vcvars: vcvarsamd64_arm64.bat
-          #   machine: ARM64
-    runs-on: windows-latest
-    timeout-minutes: 60
-    steps:
-    - uses: actions/checkout@v7
-      with:
-        submodules: recursive
-    - uses: actions/setup-python@v6
-      with:
-        python-version: '3.13'
-    - uses: actions/setup-node@v5
-      with:
-        node-version: '24'
-    - name: Load dependency versions
-      shell: bash
-      run: |
-        QT_VERSION="${QT_VERSION:-$(cat dev/qt-version.txt)}"
-        [[ "$QT_VERSION" =~ ^6\.[0-9]+\.[0-9]+$ ]] || exit 1
-        echo "QT_VERSION=$QT_VERSION" >> "$GITHUB_ENV"
-        echo "MPV_VERSION=$(cat dev/mpv-version.txt)" >> "$GITHUB_ENV"
-    - name: Install Qt and WebEngine
-      shell: bash
-      run: |
-        python -m pip install -r dev/requirements-build.txt
-        python dev/install-qt.py windows desktop "$QT_VERSION" "${{ matrix.qt_arch }}" \
-          -m qtwebengine qtwebchannel qtpositioning qtserialport -O "$RUNNER_TEMP/Qt"
-        echo "QT_ROOT_DIR=$RUNNER_TEMP/Qt/$QT_VERSION/msvc2022_64" >> "$GITHUB_ENV"
-        echo "$RUNNER_TEMP/Qt/$QT_VERSION/msvc2022_64/bin" >> "$GITHUB_PATH"
-    - name: Test dependency installers
-      shell: bash
-      run: python -m unittest discover -s tests -p 'test_install_*.py'
-    - name: Install packaging and smoke-test tools
-      run: |
-        choco install innosetup ffmpeg -y --no-progress
-      shell: powershell
-    - name: Install dependencies
-      run: |
-        mkdir build
-        curl --fail --location --retry 3 https://sourceforge.net/projects/mpv-player-windows/files/libmpv/mpv-dev-${{ matrix.mpv_arch }}-${{ env.MPV_VERSION }}.7z/download -o mpv.7z
-        7z x mpv.7z
-        mkdir mpv
-        mv include mpv
-        mv libmpv-2.dll mpv/libmpv-2.dll
-        mv mpv build/
-        if [ -n "${{ matrix.mpv_arch_fallback }}" ]; then
-          curl --fail --location --retry 3 https://sourceforge.net/projects/mpv-player-windows/files/libmpv/mpv-dev-${{ matrix.mpv_arch_fallback }}-${{ env.MPV_VERSION }}.7z/download -o mpv-fallback.7z
-          7z x mpv-fallback.7z -ompv-fallback-tmp
-          mkdir build/mpv-fallback
-          mv mpv-fallback-tmp/libmpv-2.dll build/mpv-fallback/
-        fi
-      shell: bash
-    - name: Bundle VC runtime DLLs
-      run: |
-        mkdir deps
-        mkdir deps/vcruntime
-        # Dynamically locate VS installation on runner
-        $vsPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath
-        if (-not $vsPath) {
-            $vsPath = (Get-ChildItem "C:\Program Files\Microsoft Visual Studio\*\*" | Where-Object { Test-Path "$_\VC\Redist\MSVC" } | Select-Object -First 1).FullName
-        }
-        $vsRedist = Get-ChildItem "$vsPath\VC\Redist\MSVC\*\${{ matrix.vc_redist_arch }}\Microsoft.VC*.CRT" | Sort-Object FullName -Descending | Select-Object -First 1
-        if (-not $vsRedist) {
-            $vsRedist = Get-ChildItem "$vsPath\VC\Redist\MSVC" -Recurse -Filter "Microsoft.VC*.CRT" | Where-Object { $_.FullName -like "*${{ matrix.vc_redist_arch }}*" } | Select-Object -First 1
-        }
-        if (-not $vsRedist) { throw "MSVC redistributable DLLs not found" }
-        Copy-Item "$vsRedist\*.dll" deps/vcruntime/
-      shell: powershell
-    - name: Download pinned subtitle fonts and licenses
-      shell: bash
-      run: python dev/install-fonts.py -O deps/fonts
-    - name: Build
-      run: |
-        set "VS_PATH="
-        for /f "tokens=*" %%i in ('"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath 2^>nul') do set "VS_PATH=%%i"
-        if not defined VS_PATH (
-            for /d %%d in ("C:\Program Files\Microsoft Visual Studio\*") do (
-                for /d %%e in ("%%d\*") do (
-                    if exist "%%e\VC\Auxiliary\Build\${{ matrix.vcvars }}" set "VS_PATH=%%e"
-                )
-            )
-        )
-        call "%VS_PATH%\VC\Auxiliary\Build\${{ matrix.vcvars }}"
-        cd build
-        set PATH=%PATH%;C:\Program Files (x86)\Inno Setup 6;%CD%
-        set "QT_ROOT_DIR=%QT_ROOT_DIR:\=/%"
-        dumpbin /exports mpv\libmpv-2.dll > mpv\exports.txt
-        if errorlevel 1 exit /b 1
-        powershell -NoProfile -Command "@('LIBRARY libmpv-2.dll', 'EXPORTS') + @(Get-Content 'mpv/exports.txt' | ForEach-Object { if ($_ -match '^\s+\d+\s+[0-9A-F]+\s+[0-9A-F]+\s+(mpv_\w+)') { $Matches[1] } }) | Set-Content -Encoding ascii 'mpv/mpv.def'"
-        if errorlevel 1 exit /b 1
-        lib /def:mpv\mpv.def /out:mpv\libmpv-2.dll.lib /MACHINE:${{ matrix.machine }}
-        if errorlevel 1 exit /b 1
-        cmake -GNinja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX=output -DQTROOT="%QT_ROOT_DIR%" -DMPV_INCLUDE_DIR="%CD%/mpv/include" -DMPV_LIBRARY="%CD%/mpv/libmpv-2.dll.lib" -DCHECK_FOR_UPDATES=OFF -DUSE_STATIC_MPVQT=ON -DREQUIRE_NODE_TESTS=ON ..
-        if errorlevel 1 exit /b 1
-        ninja
-        if errorlevel 1 exit /b 1
-        ninja windows_all
-      shell: cmd
-    - name: Run regression tests
-      shell: cmd
-      run: |
-        set "PATH=%CD%\build\mpv;%QT_ROOT_DIR%\bin;%PATH%"
-        ctest --test-dir build --output-on-failure
-    - name: Verify portable playback and installer lifecycle
-      shell: pwsh
-      run: ./tests/verify_windows_package.ps1
-    - name: Archive verification logs
-      if: always()
-      uses: actions/upload-artifact@v7
-      with:
-        name: ${{ matrix.artifact }}-test-logs
-        path: |
-          build/Testing/Temporary/LastTest.log
-          build/package-checks/**/*.log
-          build/package-checks/**/result.json
-    - name: Archive installer
-      uses: actions/upload-artifact@v7
-      with:
-        name: ${{ matrix.artifact }}-installer
-        path: ${{ github.workspace }}/build/JellyfinDesktop-*.exe
-        if-no-files-found: error
-    - name: Archive portable ZIP
-      uses: actions/upload-artifact@v7
-      with:
-        name: ${{ matrix.artifact }}-portable
-        path: ${{ github.workspace }}/build/JellyfinDesktop-*.zip
-        if-no-files-found: error
+    uses: ./.github/workflows/windows-package.yml
+    with:
+      qt_version: ${{ inputs.qt_version || '' }}
